@@ -1,7 +1,6 @@
-from datetime import date
-from decimal import Decimal
-
+from apps.cadastros.models import Parceiro
 from apps.integracao import legado as L
+from apps.integracao.importador import ImportadorClientes
 
 
 def test_documento_monta_cnpj_com_digito():
@@ -11,19 +10,48 @@ def test_documento_monta_cnpj_com_digito():
     assert L.documento(None, None) == ""
 
 
-def test_datas_impossiveis_sao_descartadas():
-    hoje = date(2026, 11, 14)
-    assert L.data_valida(date(1880, 9, 3), hoje) is None
-    assert L.data_valida(date(9202, 1, 1), hoje) is None
-    assert L.data_valida(date(2028, 8, 24), hoje) is None
-    assert L.data_valida(date(2026, 10, 1), hoje) == date(2026, 10, 1)
+class CursorFalso:
+    """Imita o cursor do banco antigo devolvendo linhas fixas."""
+
+    colunas = ["codigo", "nome", "fantasia", "num", "dv", "ie", "cidade", "uf"]
+
+    def __init__(self, linhas):
+        self.linhas = linhas
+        self.description = [(c,) for c in self.colunas]
+
+    def execute(self, sql, params):
+        assert "fa.crci01" in sql and params == [1]
+
+    def fetchall(self):
+        return self.linhas
 
 
-def test_conversoes():
-    assert L.modelo("57") == "57"
-    assert L.modelo("1") == "01"
-    assert L.modelo("xx") == "99"
-    assert L.decimal(234060.0) == Decimal("234060.00")
-    assert L.decimal(None) == Decimal("0")
-    assert L.cancelada(1) and not L.cancelada(0) and not L.cancelada(None)
-    assert L.documento_texto("CTe51261033691357000112") == "51261033691357000112"
+def test_importa_clientes_sem_duplicar(db):
+    linhas = [
+        (106, "AROMA BIOQUIMICA LTDA", "AROMA", 134267900001, 13, "535012345110", "PIRACICABA", "sp"),
+        (421, "UNILEVER BRASIL INDUSTRIAL LTDA", "", 16158140064, 87, "", "VINHEDO", "SP"),
+        (999, "   ", "", 0, 0, "", "", ""),
+    ]
+    r = ImportadorClientes(CursorFalso(linhas), 1).executar()
+    assert r.contagem["clientes criados"] == 2
+    assert len(r.avisos) == 1
+
+    aroma = Parceiro.objects.get(codigo_legado_cliente=106)
+    assert aroma.documento == "13426790000113"
+    assert aroma.eh_cliente and aroma.uf == "SP"
+
+    # Rodar de novo atualiza em vez de duplicar
+    r2 = ImportadorClientes(CursorFalso(linhas), 1).executar()
+    assert r2.contagem["clientes atualizados"] == 2
+    assert Parceiro.objects.count() == 2
+
+
+def test_cliente_que_ja_existe_pelo_cnpj_e_reaproveitado(db):
+    existente = Parceiro.objects.create(razao_social="Aroma", documento="13426790000113",
+                                        eh_industrializador=True)
+    linhas = [(106, "AROMA BIOQUIMICA LTDA", "", 134267900001, 13, "", "", "")]
+    ImportadorClientes(CursorFalso(linhas), 1).executar()
+    existente.refresh_from_db()
+    assert existente.eh_cliente and existente.eh_industrializador
+    assert existente.codigo_legado_cliente == 106
+    assert Parceiro.objects.count() == 1

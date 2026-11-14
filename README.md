@@ -1,6 +1,6 @@
 # ERP JT Ecobio
 
-Sistema de gestão da JT Ecobio: estoque de glicerina por tanque e distribuidora, contratos de compra e venda com saldo, e leitura das notas fiscais emitidas no ERP antigo.
+Sistema de gestão da JT Ecobio: estoque de glicerina por tanque e distribuidora, contratos de compra e venda com saldo e notas fiscais.
 
 Feito em **Python + Django** com banco **PostgreSQL**.
 
@@ -13,7 +13,7 @@ Feito em **Python + Django** com banco **PostgreSQL**.
 | Custo | Custo médio por local **ou** custo por lote, escolhido em *Admin → Configuração* | `apps/estoque/services.py` |
 | Contratos | Contratos de compra e venda; o saldo é calculado pelas notas ligadas ao contrato (notas canceladas não contam) | `apps/contratos` |
 | Notas fiscais | NF-e de entrada e saída e CT-e, com itens e impostos | `apps/fiscal` |
-| Integração | Importa clientes, fornecedores, transportadoras, produtos e notas do backup do ERP antigo | `apps/integracao` |
+| Integração | Importa os clientes do backup do ERP antigo; o resto começa do zero | `apps/integracao` |
 | Perfis | Grupos Diretoria, Comercial, Logística e Financeiro | `apps/cadastros/management/commands/criar_perfis.py` |
 
 Telas:
@@ -50,26 +50,27 @@ python manage.py runserver
 
 Abra http://localhost:8000 e entre com o usuário criado no passo 4.
 
-## Importar dados do ERP antigo
+## ERP antigo: clientes e consulta
 
-O ERP antigo continua emitindo as notas. O sistema novo lê os dados de uma cópia do banco dele, restaurada a partir do arquivo `.backup`:
+Decisão de 14/11/2026: **só os clientes vêm do ERP antigo**. Produtos, fornecedores, contratos, notas e estoque começam do zero no sistema novo. O banco antigo fica disponível apenas para consulta.
+
+O ERP antigo continua emitindo as notas fiscais. Para atualizar a cópia de consulta e os clientes a partir do arquivo `.backup`:
 
 ```bash
-scripts/restaurar_backup.sh caminho/para/VivaClean_12h.backup 2026-01-01
+scripts/restaurar_backup.sh caminho/para/VivaClean_12h.backup
 ```
 
-O script recria o banco `legado`, restaura o backup e roda `python manage.py importar_legado --desde 2026-01-01`. Pode rodar quantas vezes quiser: o que já foi importado é atualizado, não duplicado. Para ver o resultado sem gravar nada, use `python manage.py importar_legado --simular`.
+O script recria o banco `legado` (cópia só para consulta), restaura o backup e roda `python manage.py importar_legado`. Pode rodar quantas vezes quiser: clientes já importados são atualizados, não duplicados, e um cliente que já existe com o mesmo CNPJ é reaproveitado. Para ver o resultado sem gravar nada, use `python manage.py importar_legado --simular`.
 
-O que se sabe do banco antigo:
+Para consultar o banco antigo, conecte no banco `legado` com qualquer cliente PostgreSQL (DBeaver, pgAdmin ou `psql`). O que se sabe dele:
 
 - É um PostgreSQL 9.6 compartilhado por várias empresas do grupo; a JT Ecobio é a **empresa 1** (`LEGADO_EMPRESA=1`).
-- Notas de saída: `fi.arqnot` (uma linha por CFOP/alíquota, às vezes duplicada) e `fi.arqnoi` (itens). Cancelamento e chave vêm de `fi.arqnfe`.
-- Notas de entrada e CT-e: `fi.aent01` e `fi.aent02`. A chave de acesso vem dos XMLs guardados em `fi.danfe`.
-- Cadastros: `fa.crci01` (clientes), `es.esci03` (fornecedores), `fa.crci19` (transportadoras), `es.esci01` (produtos).
-- Há datas impossíveis (anos 1880, 2028, 9202); essas notas são ignoradas e aparecem como aviso no final da importação.
-- Notas de remessa e devolução para fornecedor guardam o código do fornecedor no campo de cliente; o importador procura entre os fornecedores quando não acha o cliente.
+- Clientes: `fa.crci01`. O CNPJ fica em duas colunas: `cr01cgc` (sem os dígitos) e `cr01dacc` (os dois dígitos).
+- Notas de saída: `fi.arqnot` e `fi.arqnoi` (itens); cancelamento e chave em `fi.arqnfe`.
+- Notas de entrada e CT-e: `fi.aent01` e `fi.aent02`; XMLs recebidos em `fi.danfe`.
+- Fornecedores: `es.esci03`; transportadoras: `fa.crci19`; produtos: `es.esci01`.
 
-Na importação de teste com o backup de 12/11/2026, desde 01/01/2026: 1.165 notas de saída, 1.691 de entrada, 695 CT-e e 727 produtos. Das 140 notas de saída de outubro, 11 estão canceladas.
+Na importação de teste com o backup de 12/11/2026, os 551 clientes do ERP antigo viraram 539 no sistema novo: 12 códigos antigos repetiam o CNPJ de outro cliente e foram unificados.
 
 ## Como o estoque funciona
 

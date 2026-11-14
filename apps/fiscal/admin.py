@@ -18,4 +18,3 @@ class NotaFiscalAdmin(admin.ModelAdmin):
     date_hierarchy = "data_emissao"
     autocomplete_fields = ["parceiro"]
     inlines = [NotaItemInline]
-    readonly_fields = ["origem_legado", "situacao_legado", "importada_em"]
