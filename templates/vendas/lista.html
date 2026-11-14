@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% load humanize %}
+{% block titulo %}Pedidos de venda{% endblock %}
+{% block conteudo %}
+<h1>Pedidos de venda</h1>
+<div class="acoes"><a href="{% url 'vendas:novo' %}">+ Novo pedido</a></div>
+<form method="get" style="display:flex;gap:12px;margin-bottom:16px">
+  <select name="status"><option value="">Todos</option>
+    {% for v, n in opcoes_status %}<option value="{{ v }}" {% if v == status %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  <button>Filtrar</button>
+</form>
+<div class="tabela-rolavel"><table>
+  <thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th>Produto</th><th class="num">kg</th><th class="num">R$/kg</th><th>Entrega</th><th>Status</th></tr></thead>
+  <tbody>{% for p in pedidos %}
+    <tr><td><a href="{% url 'vendas:detalhe' p.pk %}">{{ p.numero }}</a></td><td>{{ p.data|date:"d/m/Y" }}</td><td>{{ p.cliente }}</td><td>{{ p.produto }}</td>
+    <td class="num">{{ p.quantidade_kg|floatformat:0|intcomma }}</td><td class="num">{{ p.preco_unitario|floatformat:4 }}</td>
+    <td>{{ p.destino_cidade }}/{{ p.destino_uf }}</td><td>{{ p.get_status_display }}</td></tr>
+  {% empty %}<tr><td colspan="8" class="suave">Nenhum pedido.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

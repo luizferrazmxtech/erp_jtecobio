@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block titulo %}Novo pedido{% endblock %}
+{% block conteudo %}
+<h1>Novo pedido de venda</h1>
+<p class="suave">Ao salvar, o sistema já sugere de quais tanques tirar o produto pelo menor custo de produto + frete. Você revisa antes de confirmar.</p>
+{% if form.non_field_errors %}<div class="msg error">{% for e in form.non_field_errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
+<form method="post">{% csrf_token %}
+  {{ form.as_p }}
+  <button>Criar pedido</button> <a href="{% url 'vendas:lista' %}">Cancelar</a>
+</form>
+{% endblock %}

@@ -4,7 +4,7 @@ Sistema de gestão da JT Ecobio: estoque de glicerina por tanque e distribuidora
 
 Feito em **Python + Django** com banco **PostgreSQL**.
 
-## O que já existe (fase 1)
+## O que já existe (fases 1 e 2)
 
 | Parte | O que faz | Onde fica no código |
 | --- | --- | --- |
@@ -15,11 +15,13 @@ Feito em **Python + Django** com banco **PostgreSQL**.
 | Notas fiscais | NF-e de entrada e saída e CT-e, com itens e impostos | `apps/fiscal` |
 | Integração | Importa os clientes do backup do ERP antigo; o resto começa do zero | `apps/integracao` |
 | Perfis | Grupos Diretoria, Comercial, Logística e Financeiro | `apps/cadastros/management/commands/criar_perfis.py` |
+| Vendas (fase 2) | Pedido de venda atendido por vários tanques, tabela de frete, sugestão da combinação mais barata (produto + frete), reserva, faturamento com baixa no estoque e margem | `apps/vendas` |
 
 Telas:
 
 - `/estoque/` saldos por produto e local, últimas movimentações e botões de lançamento.
-- `/admin/` cadastros, contratos, notas fiscais e consultas.
+- `/vendas/` pedidos de venda: novo pedido, escolha das origens, confirmar, faturar.
+- `/admin/` cadastros, contratos, notas fiscais, tabela de frete e consultas.
 
 ## Como rodar no seu computador
 
@@ -87,6 +89,18 @@ Por isso a tela de movimentações no admin é só de consulta.
 
 Produto de cliente (serviço de envase) fica num local do tipo *Produto de cliente*: aparece no saldo, mas não entra no valor do estoque da JT.
 
+## Como a venda funciona
+
+Cada pedido é de um único produto e pode sair de vários tanques (as *origens*).
+
+1. **Tabela de frete** (*Admin → Tabela de frete*): preço em R$/kg de cada local até uma UF ou cidade. A cidade tem prioridade sobre a UF.
+2. **Rascunho**: ao criar o pedido, o sistema já sugere as origens. Ele ordena os tanques pelo custo total por kg (custo do produto no tanque + frete até o destino) e vai pegando do mais barato até completar a quantidade. Dá para informar um *mínimo por origem* para não mandar caminhão buscar pouco. As origens podem ser ajustadas à mão.
+3. **Confirmado**: as quantidades ficam reservadas. O *saldo livre* de um tanque é o saldo menos o que está reservado em pedidos confirmados. Para mudar as origens, volte o pedido para rascunho.
+4. **Faturado**: uma saída de estoque por origem, ligada à NF de saída (emitida no ERP antigo). O custo real substitui o previsto e a margem fica registrada.
+5. **Cancelado**: libera a reserva. Pedido faturado não pode ser cancelado.
+
+A tela do pedido mostra receita, custo do produto, frete e margem (total e por kg). Locais de produto de cliente nunca entram numa venda. As regras ficam em `apps/vendas/services.py`.
+
 ## Testes
 
 ```bash
@@ -97,6 +111,5 @@ Os testes usam SQLite e não precisam do banco antigo.
 
 ## Próximas fases
 
-1. Vendas com várias origens: pedido com reserva por tanque e sugestão da combinação mais barata de produto + frete.
-2. Industrialização, fracionamento e serviços (envase, transbordo, armazenagem).
-3. Financeiro e DRE automática.
+1. Industrialização, fracionamento e serviços (envase, transbordo, armazenagem).
+2. Financeiro e DRE automática.

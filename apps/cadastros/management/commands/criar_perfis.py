@@ -12,16 +12,18 @@ TUDO = ("view", "add", "change", "delete")
 
 PERFIS = {
     "Diretoria": {
-        "cadastros": TUDO, "contratos": TUDO, "fiscal": (VER,), "estoque": TUDO,
+        "cadastros": TUDO, "contratos": TUDO, "fiscal": (VER,), "estoque": TUDO, "vendas": TUDO,
     },
     "Comercial": {
         "cadastros": ("view", "add", "change"), "contratos": TUDO, "fiscal": (VER,), "estoque": (VER,),
+        "vendas": TUDO,
     },
     "Logística": {
         "cadastros": (VER,), "contratos": (VER,), "fiscal": (VER,), "estoque": ("view", "add"),
+        "vendas": ("view", "change"),
     },
     "Financeiro": {
-        "cadastros": (VER,), "contratos": (VER,), "fiscal": (VER,), "estoque": (VER,),
+        "cadastros": (VER,), "contratos": (VER,), "fiscal": (VER,), "estoque": (VER,), "vendas": (VER,),
     },
 }
 

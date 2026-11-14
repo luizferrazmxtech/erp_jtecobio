@@ -10,4 +10,5 @@ urlpatterns = [
     path("", RedirectView.as_view(pattern_name="estoque:saldos", permanent=False)),
     path("admin/", admin.site.urls),
     path("estoque/", include("apps.estoque.urls")),
+    path("vendas/", include("apps.vendas.urls")),
 ]
