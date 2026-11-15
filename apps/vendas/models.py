@@ -21,6 +21,8 @@ from apps.contratos.models import Contrato
 from apps.estoque.models import Lote, Movimentacao
 from apps.fiscal.models import NotaFiscal
 
+from . import impostos
+
 ZERO = Decimal("0")
 
 
@@ -97,6 +99,13 @@ class Pedido(models.Model):
     preco_unitario = models.DecimalField("preço bruto (R$/kg)", max_digits=12, decimal_places=4)
     destino_cidade = models.CharField("cidade de entrega", max_length=100)
     destino_uf = models.CharField("UF de entrega", max_length=2)
+    exportacao = models.BooleanField(
+        "exportação", default=False, help_text="Venda para fora do país: sem ICMS, PIS e COFINS.",
+    )
+    icms_venda = models.DecimalField(
+        "ICMS na venda (%)", max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Em branco: 18% dentro de SP, 12% para outros estados.",
+    )
     status = models.CharField(max_length=4, choices=Status.choices, default=Status.RASCUNHO)
     nota = models.ForeignKey(
         NotaFiscal, on_delete=models.PROTECT, null=True, blank=True, related_name="pedidos",
@@ -118,6 +127,10 @@ class Pedido(models.Model):
             ultimo = Pedido.objects.aggregate(m=models.Max("numero"))["m"] or 0
             self.numero = ultimo + 1
         self.destino_uf = (self.destino_uf or "").upper().strip()
+        if self.exportacao:
+            self.icms_venda = Decimal("0")
+        elif self.icms_venda is None:
+            self.icms_venda = impostos.icms_venda_padrao(self.destino_uf)
         super().save(*args, **kwargs)
 
     # Totais ---------------------------------------------------------------
@@ -154,6 +167,36 @@ class Pedido(models.Model):
     @property
     def margem_kg(self) -> Decimal:
         return self.margem / self.quantidade_kg if self.quantidade_kg else ZERO
+
+    # Valores net (sem os impostos que viram crédito/débito) ----------------
+    @property
+    def fator_venda(self) -> Decimal:
+        return impostos.fator(self.icms_venda or 0, pis_cofins=not self.exportacao)
+
+    @property
+    def fator_compra(self) -> Decimal:
+        return impostos.fator(self.produto.icms_compra)
+
+    @property
+    def receita_net(self) -> Decimal:
+        return self.receita * self.fator_venda
+
+    @property
+    def custo_total_net(self) -> Decimal:
+        return self.custo_produto * self.fator_compra + impostos.frete_net(1) * self.custo_frete
+
+    @property
+    def margem_net(self) -> Decimal:
+        return self.receita_net - self.custo_total_net
+
+    @property
+    def margem_net_kg(self) -> Decimal:
+        return self.margem_net / self.quantidade_kg if self.quantidade_kg else ZERO
+
+    @property
+    def impostos_venda(self) -> Decimal:
+        """ICMS + PIS + COFINS da venda, já descontados os créditos da compra e do frete."""
+        return (self.receita - self.receita_net) - (self.custo_total - self.custo_total_net)
 
     @property
     def editavel(self) -> bool:

@@ -19,6 +19,7 @@ from apps.estoque import services as estoque
 from apps.estoque.models import Configuracao, Lote, Movimentacao
 from apps.fiscal.models import NotaFiscal
 
+from . import impostos
 from .models import Pedido, PedidoOrigem, TabelaFrete
 
 ZERO = Decimal("0")
@@ -56,6 +57,7 @@ class Opcao:
     livre: Decimal
     custo_kg: Decimal
     frete: TabelaFrete | None
+    fator_compra: Decimal = Decimal("1")
 
     @property
     def frete_kg(self) -> Decimal | None:
@@ -67,9 +69,21 @@ class Opcao:
             return None
         return self.custo_kg + self.frete.preco_kg
 
+    @property
+    def custo_net_kg(self) -> Decimal:
+        """Produto sem impostos (crédito de ICMS, PIS e COFINS)."""
+        return self.custo_kg * self.fator_compra
+
+    @property
+    def custo_total_net_kg(self) -> Decimal | None:
+        if self.frete is None:
+            return None
+        return self.custo_net_kg + impostos.frete_net(self.frete.preco_kg)
+
     def chave_ordem(self):
+        # O que conta é o custo net: o imposto pago na compra volta como crédito.
         # Origens sem frete cadastrado vão para o fim da fila.
-        return (self.frete is None, self.custo_total_kg or self.custo_kg, -self.livre)
+        return (self.frete is None, self.custo_total_net_kg or self.custo_net_kg, -self.livre)
 
 
 def opcoes_de_origem(produto: Produto, cidade: str, uf: str, excluir: Pedido | None = None) -> list[Opcao]:
@@ -78,6 +92,7 @@ def opcoes_de_origem(produto: Produto, cidade: str, uf: str, excluir: Pedido | N
     Locais de produto de cliente (serviço de envase) nunca entram numa venda.
     """
     por_lote = Configuracao.atual().metodo_custo == Configuracao.MetodoCusto.LOTE
+    fator = impostos.fator(produto.icms_compra)
     opcoes = []
     locais = Local.objects.filter(
         ativo=True, movimentacoes__produto=produto,
@@ -89,11 +104,11 @@ def opcoes_de_origem(produto: Produto, cidade: str, uf: str, excluir: Pedido | N
             for lote in lotes:
                 livre = saldo_livre(produto, local, lote, excluir)
                 if livre > 0:
-                    opcoes.append(Opcao(local, lote, livre, lote.custo_unitario, frete))
+                    opcoes.append(Opcao(local, lote, livre, lote.custo_unitario, frete, fator))
         else:
             livre = saldo_livre(produto, local, None, excluir)
             if livre > 0:
-                opcoes.append(Opcao(local, None, livre, estoque.custo_medio(produto, local), frete))
+                opcoes.append(Opcao(local, None, livre, estoque.custo_medio(produto, local), frete, fator))
     opcoes.sort(key=Opcao.chave_ordem)
     return opcoes
 
@@ -114,7 +129,7 @@ def sugerir_origens(
     produto: Produto, quantidade_kg, cidade: str, uf: str,
     minimo_por_origem_kg=0, excluir: Pedido | None = None,
 ) -> Sugestao:
-    """Escolhe as origens de menor custo total (produto + frete por kg).
+    """Escolhe as origens de menor custo efetivo net (produto + frete, sem impostos).
 
     Vai pegando do tanque mais barato até completar a quantidade. Um tanque
     que só completaria menos que `minimo_por_origem_kg` é pulado (não vale
@@ -159,6 +174,11 @@ def definir_origens(pedido: Pedido, origens: list[dict]) -> None:
     Se o frete não for informado, usa o da tabela de frete.
     """
     _exigir_status(_travar(pedido), Pedido.Status.RASCUNHO)
+    total = sum((Decimal(str(o["quantidade_kg"])) for o in origens), ZERO)
+    if total > pedido.quantidade_kg:
+        raise ValidationError(
+            f"Os tanques somam {total:.0f} kg, mais que os {pedido.quantidade_kg:.0f} kg do pedido."
+        )
     pedido.origens.all().delete()
     por_lote = Configuracao.atual().metodo_custo == Configuracao.MetodoCusto.LOTE
     for o in origens:

@@ -12,7 +12,7 @@ class PedidoForm(forms.ModelForm):
     class Meta:
         model = Pedido
         fields = ["data", "cliente", "contrato", "produto", "quantidade_kg", "preco_unitario",
-                  "destino_cidade", "destino_uf", "observacao"]
+                  "destino_cidade", "destino_uf", "exportacao", "icms_venda", "observacao"]
         widgets = {
             "data": forms.DateInput(attrs={"type": "date"}),
             "observacao": forms.Textarea(attrs={"rows": 2}),

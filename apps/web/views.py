@@ -421,7 +421,7 @@ class ParceiroForm(forms.ModelForm):
 class ProdutoForm(forms.ModelForm):
     class Meta:
         model = Produto
-        fields = ["codigo", "nome", "tipo", "unidade", "densidade", "ncm", "controla_estoque", "ativo"]
+        fields = ["codigo", "nome", "tipo", "unidade", "densidade", "ncm", "icms_compra", "controla_estoque", "ativo"]
 
 
 class LocalForm(forms.ModelForm):
@@ -526,3 +526,42 @@ def adicionar(request, nome):
 @login_required
 def editar(request, nome, pk):
     return _form_cadastro(request, nome, pk)
+
+
+# ---------------------------------------------------------------------------
+# Conferir a planilha DRE
+# ---------------------------------------------------------------------------
+
+GRAVIDADES = {
+    "alta": ("Muda o número", "vermelho"),
+    "media": ("Confirmar", "amarelo"),
+    "baixa": ("Risco futuro", "cinza"),
+}
+
+
+@login_required
+def conferir_planilha(request):
+    """Recebe a planilha DRE (.xlsx), refaz as contas e lista as fórmulas erradas.
+
+    O arquivo não é guardado: é lido, conferido e descartado."""
+    from apps.integracao.conferencia import conferir
+
+    achados, nome, erro = None, "", ""
+    if request.method == "POST" and request.FILES.get("arquivo"):
+        arquivo = request.FILES["arquivo"]
+        nome = arquivo.name
+        if not nome.lower().endswith((".xlsx", ".xlsm")):
+            erro = "Envie a planilha no formato .xlsx."
+        else:
+            try:
+                achados = conferir(arquivo)
+            except Exception as e:  # planilha corrompida ou em outro formato
+                erro = f"Não consegui ler a planilha: {e}"
+    linhas = []
+    for a in achados or []:
+        rotulo, cor = GRAVIDADES[a.gravidade]
+        linhas.append({"a": a, "rotulo": rotulo, "cor": cor})
+    contagem = {g: sum(1 for a in achados or [] if a.gravidade == g) for g in GRAVIDADES}
+    return render(request, "web/conferir_planilha.html", {
+        "linhas": linhas, "nome": nome, "erro": erro, "conferiu": achados is not None, "contagem": contagem,
+    })
