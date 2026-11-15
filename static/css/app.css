@@ -534,3 +534,45 @@ a.indicador:hover { text-decoration: none; border-color: var(--borda-forte); }
 .secao-correcao summary::-webkit-details-marker { display: none; }
 @media (max-width: 900px) { .indicadores.ind-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .aviso[hidden] { display: none; }
+
+/* Painel: gráfico de vendas e serviços com escala */
+.legenda-grafico { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--suave); margin-bottom: 10px; }
+.legenda-grafico b { color: var(--texto, #1f2933); font-weight: 600; }
+.cor-vendas, .cor-servicos { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.cor-vendas { background: var(--verde); }
+.cor-servicos { background: var(--azul); }
+.grafico-vendas { display: grid; grid-template-columns: 52px minmax(0, 1fr); grid-template-rows: 220px auto; column-gap: 8px; }
+.grafico-vendas .eixo { position: relative; }
+.grafico-vendas .eixo span { position: absolute; right: 0; transform: translateY(50%); font-size: 11px; color: var(--suave); white-space: nowrap; }
+.grafico-vendas .area { position: relative; display: flex; align-items: flex-end; gap: 6px; border-bottom: 1px solid var(--borda); }
+.grafico-vendas .linha-grade { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--borda); pointer-events: none; }
+.grafico-vendas .coluna { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; min-width: 0; outline: none; }
+.grafico-vendas .pilha { width: 100%; max-width: 40px; display: flex; flex-direction: column; position: relative; min-height: 2px; }
+.grafico-vendas .parte { min-height: 0; }
+.grafico-vendas .parte:first-of-type { border-radius: 5px 5px 0 0; }
+.grafico-vendas .parte.vendas { background: var(--verde); }
+.grafico-vendas .parte.servicos { background: var(--azul); }
+.grafico-vendas .valor-topo { position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); font-size: 10.5px; font-weight: 600; color: #3d4754; white-space: nowrap; }
+.grafico-vendas .coluna:hover .pilha, .grafico-vendas .coluna:focus .pilha { filter: brightness(.88); }
+.grafico-vendas .dica-mes {
+  display: none; position: absolute; bottom: 30%; left: 50%; transform: translateX(-50%); z-index: 3; min-width: 200px;
+  background: var(--topo); color: #fff; font-size: 12px; padding: 8px 10px; border-radius: 7px; box-shadow: 0 6px 18px rgba(0,0,0,.18);
+}
+.grafico-vendas .dica-mes.esquerda { left: auto; right: 0; transform: none; }
+.grafico-vendas .dica-mes div { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; }
+.grafico-vendas .dica-mes div em { font-style: normal; }
+.grafico-vendas .dica-mes div span { font-variant-numeric: tabular-nums; }
+.grafico-vendas .dica-mes .total { border-top: 1px solid rgba(255,255,255,.2); padding-top: 4px; font-weight: 600; }
+.grafico-vendas .coluna:hover .dica-mes, .grafico-vendas .coluna:focus .dica-mes { display: block; }
+.grafico-vendas .meses { display: flex; gap: 6px; padding-top: 6px; }
+.grafico-vendas .meses span { flex: 1; text-align: center; font-size: 11px; color: var(--suave); white-space: nowrap; min-width: 0; }
+@media (max-width: 640px) {
+  .grafico-vendas { grid-template-columns: 40px minmax(0, 1fr); }
+  .grafico-vendas .area, .grafico-vendas .meses { gap: 2px; }
+  .grafico-vendas .dica-mes { min-width: 180px; }
+  .grafico-vendas .coluna:nth-child(-n+11) .dica-mes { left: 0; transform: none; }
+  .grafico-vendas .valor-topo { display: none; }
+  .grafico-vendas .meses span:nth-child(even) { visibility: hidden; }
+}
+.margem-forn { display: flex; flex-direction: column; gap: 4px; }
+.margem-forn b.vermelho { color: var(--vermelho); }
