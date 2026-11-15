@@ -24,6 +24,7 @@
     function escolher(item) {
       var op = Array.prototype.find.call(escolha.options, function (o) { return o.value === String(item.id); });
       if (!op) { op = new Option(item.texto, item.id); escolha.add(op); }
+      if (item.densidade) op.dataset.densidade = item.densidade;
       escolha.value = String(item.id);
       texto.value = item.texto;
       fechar();
@@ -33,7 +34,11 @@
       itens = resultados;
       lista.innerHTML = "";
       if (!resultados.length) {
-        lista.innerHTML = '<div class="busca-vazio">Nada encontrado. Tente outra parte do nome, o CNPJ ou a cidade.</div>';
+        var vazio = caixa.dataset.vazio || "Nada encontrado. Tente outra parte do nome, o CNPJ ou a cidade.";
+        if (!texto.value.trim() && caixa.dataset.vazio) vazio = caixa.dataset.vazio;
+        else if (caixa.dataset.vazio) vazio = "Nada encontrado. Tente outra parte do nome ou o código.";
+        lista.innerHTML = '<div class="busca-vazio"></div>';
+        lista.firstChild.textContent = vazio;
       }
       resultados.forEach(function (r, i) {
         var el = document.createElement("div");
@@ -51,7 +56,13 @@
     function buscar() {
       var q = texto.value.trim(), n = ++pedido;
       var sep = url.indexOf("?") >= 0 ? "&" : "?";
-      fetch(url + sep + "q=" + encodeURIComponent(q), { credentials: "same-origin" })
+      var extra = "";
+      if (caixa.dataset.depende) {
+        // Ex.: produto depende do cliente → manda o cliente escolhido junto.
+        var outro = caixa.closest("form").querySelector('[name="' + caixa.dataset.depende + '"]');
+        if (outro && outro.value) extra = "&" + caixa.dataset.depende + "=" + encodeURIComponent(outro.value);
+      }
+      fetch(url + sep + "q=" + encodeURIComponent(q) + extra, { credentials: "same-origin" })
         .then(function (r) { return r.json(); })
         .then(function (d) { if (n === pedido) mostrar(d.resultados || []); });
     }

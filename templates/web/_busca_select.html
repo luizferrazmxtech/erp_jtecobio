@@ -1,4 +1,4 @@
-<div class="busca-campo" data-url="{{ widget.url }}">
+<div class="busca-campo" data-url="{{ widget.url }}"{% if widget.depende %} data-depende="{{ widget.depende }}"{% endif %}{% if widget.vazio %} data-vazio="{{ widget.vazio }}"{% endif %}>
   <input type="search" class="busca-texto" placeholder="{{ widget.placeholder }}" autocomplete="off" aria-autocomplete="list" aria-label="Buscar">
   <select name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %} class="busca-escolha">{% for group_name, group_choices, group_index in widget.optgroups %}{% for option in group_choices %}{% include option.template_name with widget=option %}{% endfor %}{% endfor %}</select>
   <div class="busca-lista" role="listbox" hidden></div>

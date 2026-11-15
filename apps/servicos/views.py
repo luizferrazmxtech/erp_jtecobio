@@ -20,7 +20,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from apps.cadastros.models import Produto
 from apps.fiscal.models import NotaFiscal
 from apps.web.templatetags.erp import kg, num
 
@@ -166,7 +165,6 @@ def _form_os(request, os=None):
     return render(request, "servicos/formulario.html", {
         "form": form, "os": os, "tipos": tipos, "linhas": linhas_tela, "erros_recip": erros_recip,
         "titulo": f"Editar {os}" if os else "Nova ordem de serviço",
-        "densidades": {p.pk: str(p.densidade) for p in Produto.objects.filter(ativo=True, densidade__isnull=False)},
     })
 
 

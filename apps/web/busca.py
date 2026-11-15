@@ -11,7 +11,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.urls import reverse
 
-from apps.cadastros.models import Parceiro
+from apps.cadastros.models import Parceiro, Produto
 
 PAPEIS = {
     "cliente": "eh_cliente", "fornecedor": "eh_fornecedor", "transportadora": "eh_transportadora",
@@ -58,6 +58,51 @@ def parceiros(request):
     return JsonResponse({"resultados": [dados_parceiro(p) for p in qs]})
 
 
+def _densidade(d) -> str:
+    return f"densidade {str(d).rstrip('0').rstrip('.').replace('.', ',')}" if d else ""
+
+
+@login_required
+def produtos(request):
+    """GET /busca/produtos/?q=texto&cliente=ID → produtos ativos.
+
+    Com cliente: primeiro os produtos que ele já trouxe para envasar (pelas
+    OS anteriores, do mais frequente para o menos); sem texto digitado, só
+    eles. Os outros produtos aparecem quando você digita."""
+    from django.db.models import Count, Max
+
+    from apps.servicos.models import OrdemServico
+
+    q = " ".join(request.GET.get("q", "").split())
+    cliente = request.GET.get("cliente", "")
+    do_cliente = {}
+    if cliente.isdigit():
+        linhas = (OrdemServico.objects.filter(cliente_id=cliente, produto__isnull=False)
+                  .exclude(status=OrdemServico.Status.CANCELADA)
+                  .values("produto").annotate(n=Count("id"), ultima=Max("data")).order_by("-n", "-ultima"))
+        do_cliente = {l["produto"]: l for l in linhas}
+    filtro = Q()
+    for palavra in q.split():
+        filtro &= Q(nome__icontains=palavra) | Q(codigo__icontains=palavra) | Q(codigo_legado=palavra)
+    resultados = []
+
+    def dados(p, extra=""):
+        detalhe = " · ".join(x for x in (extra, p.codigo, _densidade(p.densidade)) if x)
+        return {"id": p.pk, "texto": p.nome, "fantasia": "", "detalhe": detalhe,
+                "densidade": str(p.densidade) if p.densidade else ""}
+
+    if do_cliente:
+        meus = {p.pk: p for p in Produto.objects.filter(filtro, pk__in=do_cliente, ativo=True)}
+        for pk, l in do_cliente.items():
+            if pk in meus:
+                vezes = "1 vez" if l["n"] == 1 else f"{l['n']} vezes"
+                resultados.append(dados(meus[pk], f"★ este cliente já envasou {vezes}, a última em {l['ultima']:%d/%m/%Y}"))
+    if q:
+        outros = Produto.objects.filter(filtro, ativo=True).exclude(pk__in=do_cliente).order_by("nome")
+        resultados += [dados(p) for p in outros[:LIMITE]]
+    return JsonResponse({"resultados": resultados[:LIMITE + len(do_cliente)]})
+
+
 class BuscaSelect(forms.Select):
     """Lista que vira caixa de busca digitável.
 
@@ -67,15 +112,21 @@ class BuscaSelect(forms.Select):
 
     template_name = "web/_busca_select.html"
 
-    def __init__(self, papel="", placeholder="Digite o nome, CNPJ ou cidade…", attrs=None):
+    def __init__(self, papel="", placeholder="Digite o nome, CNPJ ou cidade…", attrs=None,
+                 url_nome="web:busca_parceiros", depende="", vazio=""):
+        """url_nome: endereço da busca. depende: nome de outro campo cujo valor
+        vai junto na busca (ex.: "cliente"). vazio: texto quando nada combina."""
         super().__init__(attrs)
         self.papel = papel
         self.placeholder = placeholder
+        self.url_nome, self.depende, self.vazio = url_nome, depende, vazio
 
     def get_context(self, name, value, attrs):
         contexto = super().get_context(name, value, attrs)
-        contexto["widget"]["url"] = reverse("web:busca_parceiros") + (f"?papel={self.papel}" if self.papel else "")
+        contexto["widget"]["url"] = reverse(self.url_nome) + (f"?papel={self.papel}" if self.papel else "")
         contexto["widget"]["placeholder"] = self.placeholder
+        contexto["widget"]["depende"] = self.depende
+        contexto["widget"]["vazio"] = self.vazio
         return contexto
 
     def optgroups(self, name, value, attrs=None):

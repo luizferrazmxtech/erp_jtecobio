@@ -240,3 +240,28 @@ def test_cadastro_de_recipiente_pela_tela(logado, db):
                                              "preco_kg": "0,35", "tempo_padrao_min": "1", "ativo": "on"})
     assert resp.status_code == 302
     assert TipoRecipiente.objects.get(nome="Bombona 20 L").preco_kg == D("0.35")
+
+
+def test_busca_de_produto_traz_primeiro_os_do_cliente(logado, os_kemin):
+    from apps.cadastros.models import Produto
+
+    enhancea = Produto.objects.create(codigo="ENH", nome="EN-HANCEA 132B", densidade=D("1.10"))
+    Produto.objects.create(codigo="GLI", nome="Glicerina bi-destilada")
+    Produto.objects.create(codigo="VELHO", nome="Glicerina antiga", ativo=False)
+    os_kemin.produto = enhancea
+    os_kemin.save()
+
+    # Sem digitar: só os produtos que o cliente já envasou
+    r = logado.get(f"/busca/produtos/?q=&cliente={os_kemin.cliente_id}").json()["resultados"]
+    assert [x["texto"] for x in r] == ["EN-HANCEA 132B"]
+    assert "já envasou 1 vez" in r[0]["detalhe"] and r[0]["densidade"] == "1.1000"
+
+    # Digitando: os do cliente primeiro, depois os outros ativos (inativos nunca)
+    r = logado.get(f"/busca/produtos/?q=gli&cliente={os_kemin.cliente_id}").json()["resultados"]
+    assert [x["texto"] for x in r] == ["Glicerina bi-destilada"]
+    r = logado.get(f"/busca/produtos/?q=e&cliente={os_kemin.cliente_id}").json()["resultados"]
+    assert r[0]["texto"] == "EN-HANCEA 132B" and "Glicerina antiga" not in [x["texto"] for x in r]
+
+    # A tela não manda mais a lista inteira de produtos
+    pagina = logado.get("/servicos/nova/").content.decode()
+    assert "Glicerina antiga" not in pagina and "/busca/produtos/" in pagina
