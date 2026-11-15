@@ -1,0 +1,87 @@
+{% extends "base.html" %}{% load erp l10n %}
+{% block titulo %}Pedido {{ pedido.numero }}{% endblock %}
+{% block icone_titulo %}{% icone "vendas" %}{% endblock %}
+{% block titulo_pagina %}Pedido de venda {{ pedido.numero }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'vendas:lista' %}">Vendas</a> {% icone "direita" %} <b>{{ pedido.numero }}</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes">
+  {% if pedido.status == "RASC" %}
+    <form method="post" action="{% url 'vendas:confirmar' pedido.pk %}">{% csrf_token %}<button class="botao verde">{% icone "ok" %} Confirmar e reservar</button></form>
+  {% elif pedido.status == "CONF" %}
+    <form method="post" action="{% url 'vendas:reabrir' pedido.pk %}">{% csrf_token %}<button class="botao claro">{% icone "voltar" %} Voltar para rascunho</button></form>
+  {% endif %}
+  {% if pedido.status == "RASC" or pedido.status == "CONF" %}
+    <form method="post" action="{% url 'vendas:cancelar' pedido.pk %}">{% csrf_token %}<button class="botao perigo">{% icone "fechar" %} Cancelar pedido</button></form>
+  {% endif %}
+  <span class="espaco"></span>{% situacao pedido.status %}
+</div>
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "vendas" %} Dados do <b>pedido</b></h2>{% if pedido.observacao %}<p>{{ pedido.observacao }}</p>{% endif %}</div></div>
+  <div class="corpo"><div class="dados">
+    <div><span>Cliente</span><b><a href="{% url 'web:parceiro' pedido.cliente_id %}">{{ pedido.cliente.razao_social }}</a></b></div>
+    <div><span>Produto</span><b>{{ pedido.produto }}</b></div>
+    <div><span>Entrega</span><b>{{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}</b></div>
+    <div><span>Data</span><b>{{ pedido.data|date:"d/m/Y" }}</b></div>
+    <div><span>Contrato</span><b>{% if pedido.contrato %}<a href="{% url 'web:contrato' pedido.contrato_id %}">{{ pedido.contrato.numero }}</a>{% else %}—{% endif %}</b></div>
+    <div><span>Preço bruto</span><b>R$ {{ pedido.preco_unitario|num:4 }}/kg</b></div>
+    <div><span>Nota fiscal</span><b>{% if pedido.nota %}<a href="{% url 'web:nota' pedido.nota_id %}">NF {{ pedido.nota.numero|stringformat:"d" }}</a>{% else %}—{% endif %}</b></div>
+    <div><span>Faturado em</span><b>{{ pedido.data_faturamento|date:"d/m/Y"|default:"—" }}</b></div>
+  </div></div>
+  <div class="resumo">
+    <div><span>Quantidade</span><b>{{ pedido.quantidade_kg|kg }} kg</b></div>
+    <div><span>Alocado nos tanques</span><b class="{% if pedido.quantidade_alocada != pedido.quantidade_kg %}negativo{% endif %}">{{ pedido.quantidade_alocada|kg }} kg</b></div>
+    <div><span>Receita bruta</span><b>R$ {{ pedido.receita|brl }}</b></div>
+    <div><span>Custo produto + frete</span><b>R$ {{ pedido.custo_total|brl }}</b></div>
+    <div><span>Margem antes de impostos</span><b class="{% if pedido.margem >= 0 %}positivo{% else %}negativo{% endif %}">R$ {{ pedido.margem|brl }}</b><span>R$ {{ pedido.margem_kg|num:4 }}/kg</span></div>
+  </div>
+</div>
+
+{% if pedido.editavel %}
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "tanque" %} De quais <b>tanques</b> sai</h2><p>Tanques com saldo livre, do menor para o maior custo até o destino. Preencha quanto sai de cada um; o frete vem da tabela e pode ser alterado.</p></div>
+    <form method="post" action="{% url 'vendas:sugerir' pedido.pk %}" style="display:flex;gap:8px;align-items:center">{% csrf_token %}
+      <label class="pequeno suave nowrap" for="minimo">Mínimo por tanque (kg)</label><input id="minimo" name="minimo" value="0" style="width:100px;height:32px" inputmode="decimal">
+      <button class="botao claro pequeno">Sugerir a mais barata</button></form></div>
+  <form method="post" action="{% url 'vendas:salvar_origens' pedido.pk %}">{% csrf_token %}
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Tanque</th><th>Lote</th><th class="num">Saldo livre (kg)</th><th class="num">Custo (R$/kg)</th><th class="num">Frete (R$/kg)</th><th class="num">Total (R$/kg)</th><th class="num">Sair (kg)</th></tr></thead>
+    <tbody>{% for l in linhas %}
+      <tr>
+        <td><b>{{ l.opcao.local }}</b><input type="hidden" name="local_{{ forloop.counter0 }}" value="{{ l.opcao.local.pk }}"><input type="hidden" name="lote_{{ forloop.counter0 }}" value="{{ l.opcao.lote.pk|default:'' }}">{% if forloop.first %}<span class="sub">mais barato</span>{% endif %}</td>
+        <td>{{ l.opcao.lote.codigo|default:"—" }}</td>
+        <td class="num">{{ l.opcao.livre|kg }}</td>
+        <td class="num">{{ l.opcao.custo_kg|num:4 }}</td>
+        <td class="num"><input name="frete_{{ forloop.counter0 }}" value="{{ l.frete|default_if_none:''|unlocalize }}" placeholder="sem tabela" inputmode="decimal" style="max-width:110px"></td>
+        <td class="num">{% if l.opcao.custo_total_kg is not None %}<b>{{ l.opcao.custo_total_kg|num:4 }}</b>{% else %}<span class="suave">sem frete</span>{% endif %}</td>
+        <td class="num"><input name="qtd_{{ forloop.counter0 }}" value="{{ l.quantidade|unlocalize }}" inputmode="decimal"></td>
+      </tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Nenhum tanque com saldo livre deste produto.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="rodape-tabela"><span>Pedido de {{ pedido.quantidade_kg|kg }} kg · alocado {{ pedido.quantidade_alocada|kg }} kg</span><button class="botao">{% icone "ok" %} Salvar tanques</button></div>
+  </form>
+</div>
+{% else %}
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "tanque" %} <b>Tanques</b> do pedido</h2>{% if pedido.status == "CONF" %}<p>Quantidades reservadas: não podem ser vendidas em outro pedido.</p>{% endif %}</div></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Tanque</th><th>Lote</th><th class="num">kg</th><th class="num">Custo (R$/kg)</th><th class="num">Frete (R$/kg)</th><th>Transportadora</th></tr></thead>
+    <tbody>{% for o in origens %}
+      <tr><td><b>{{ o.local }}</b></td><td>{{ o.lote.codigo|default:"—" }}</td><td class="num">{{ o.quantidade_kg|kg }}</td>
+      <td class="num">{{ o.custo_unitario|num:4 }}</td><td class="num">{{ o.frete_kg|num:4 }}</td><td>{{ o.transportadora|default:"—" }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% if pedido.status == "CONF" %}
+<form method="post" action="{% url 'vendas:faturar' pedido.pk %}" class="cartao formulario">{% csrf_token %}
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Registrar o <b>faturamento</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">Baixa o estoque de cada tanque com o custo do dia. A NF continua sendo emitida no ERP antigo.</p>
+    <div class="campos">{% for campo in faturar_form %}{% include "web/_campo.html" %}{% endfor %}</div>
+  </div>
+  <div class="rodape"><span></span><button class="botao verde">{% icone "ok" %} Faturar e baixar estoque</button></div>
+</form>
+{% endif %}
+{% endblock %}

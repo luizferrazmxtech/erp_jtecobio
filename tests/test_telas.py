@@ -15,7 +15,7 @@ def admin_client(client, db):
 
 def test_telas_exigem_login(client, db):
     resp = client.get("/estoque/")
-    assert resp.status_code == 302 and "/admin/login/" in resp["Location"]
+    assert resp.status_code == 302 and "/entrar/" in resp["Location"]
 
 
 def test_lancar_entrada_pela_tela(admin_client, glicerina, aroma):

@@ -1,43 +1,122 @@
-{% load static %}<!doctype html>
+{% load static erp %}<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}ERP JT Ecobio{% endblock %}</title>
-  <style>
-    :root { --cor: #0f766e; --borda: #d4d4d8; --fundo: #fafafa; --texto: #18181b; --suave: #71717a; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, sans-serif; background: var(--fundo); color: var(--texto); }
-    header { background: var(--cor); color: #fff; padding: 12px 24px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-    header a { color: #fff; text-decoration: none; }
-    header strong { margin-right: auto; }
-    main { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
-    table { width: 100%; border-collapse: collapse; background: #fff; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid var(--borda); text-align: left; }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    tfoot td { font-weight: 600; }
-    .msg { padding: 10px 14px; border-radius: 6px; background: #ecfdf5; border: 1px solid #a7f3d0; margin-bottom: 16px; }
-    .erro { background: #fef2f2; border-color: #fecaca; }
-    .acoes a { display: inline-block; margin: 0 8px 8px 0; padding: 8px 12px; border: 1px solid var(--cor); border-radius: 6px; color: var(--cor); text-decoration: none; }
-    form p { margin: 0 0 12px; }
-    form label { display: block; font-weight: 600; margin-bottom: 4px; }
-    input, select, textarea { width: 100%; max-width: 420px; padding: 6px 8px; border: 1px solid var(--borda); border-radius: 4px; font: inherit; }
-    .helptext { display: block; color: var(--suave); font-size: .85em; }
-    button { padding: 8px 16px; background: var(--cor); color: #fff; border: 0; border-radius: 6px; font: inherit; cursor: pointer; }
-    .suave { color: var(--suave); }
-  </style>
+  <title>{% block titulo %}Painel{% endblock %} · JT Ecobio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script>try { if (localStorage.getItem("menu") === "fechado" && innerWidth > 900) document.documentElement.classList.add("pre-fechado"); } catch (e) {}</script>
 </head>
 <body>
-<header>
-  <strong>ERP JT Ecobio</strong>
-  <a href="{% url 'estoque:saldos' %}">Estoque</a>
-  <a href="{% url 'admin:index' %}">Cadastros</a>
-  {% if user.is_authenticated %}<span>{{ user.get_username }}</span>
-  <form method="post" action="{% url 'admin:logout' %}" style="margin:0">{% csrf_token %}<button style="padding:4px 10px">Sair</button></form>{% endif %}
+<header class="topo">
+  <a class="marca" href="{% url 'web:painel' %}"><span class="gota">{% icone "gota" %}</span><span>jt<b>ecobio</b></span></a>
+  <button class="botao-menu" type="button" id="alternar-menu" aria-label="Abrir ou fechar o menu">{% icone "menu" %}</button>
+  <span class="espaco"></span>
+  {% if user.is_authenticated %}
+  <div class="usuario">
+    <span class="nome-usuario">{{ user.get_full_name|default:user.get_username }}</span>
+    <span class="avatar">{{ user.get_username|slice:":2" }}</span>
+    <form method="post" action="{% url 'sair' %}">{% csrf_token %}<button class="sair" title="Sair">{% icone "sair" %}</button></form>
+  </div>
+  {% endif %}
 </header>
-<main>
-  {% for m in messages %}<div class="msg">{{ m }}</div>{% endfor %}
-  {% block conteudo %}{% endblock %}
+
+<nav class="lateral" aria-label="Menu principal">
+  <div class="empresa">
+    <span class="avatar">JT</span>
+    <div><b>JT ECOBIO</b><span>23.001.964/0001-50</span></div>
+  </div>
+
+  <a class="item {% ativo '/painel' %}{% if request.path == '/' %}ativo{% endif %}" href="{% url 'web:painel' %}">{% icone "painel" %} Painel</a>
+
+  <details {% if '/cadastros/' in request.path %}open{% endif %}>
+    <summary>{% icone "cadastros" %} Cadastros {% icone "baixo" "ic seta" %}</summary>
+    <div class="sub">
+      <a class="{% if request.GET.papel == 'cliente' %}ativo{% endif %}" href="{% url 'web:parceiros' %}?papel=cliente">{% icone "cadastros" %} Clientes</a>
+      <a class="{% if request.GET.papel == 'fornecedor' %}ativo{% endif %}" href="{% url 'web:parceiros' %}?papel=fornecedor">{% icone "cadastros" %} Fornecedores</a>
+      <a class="{% if request.GET.papel == 'transportadora' %}ativo{% endif %}" href="{% url 'web:parceiros' %}?papel=transportadora">{% icone "frete" %} Transportadoras</a>
+      <a class="{% ativo '/cadastros/produtos' %}" href="{% url 'web:produtos' %}">{% icone "produto" %} Produtos</a>
+      <a class="{% ativo '/cadastros/locais' %}" href="{% url 'web:locais' %}">{% icone "local" %} Locais e tanques</a>
+    </div>
+  </details>
+
+  <details {% if '/estoque/' in request.path %}open{% endif %}>
+    <summary>{% icone "estoque" %} Estoque {% icone "baixo" "ic seta" %}</summary>
+    <div class="sub">
+      <a class="{% if request.path == '/estoque/' %}ativo{% endif %}" href="{% url 'estoque:saldos' %}">{% icone "tanque" %} Saldos por tanque</a>
+      <a class="{% ativo '/estoque/movimentacoes' %}" href="{% url 'web:movimentacoes' %}">{% icone "transferir" %} Movimentações</a>
+      <a class="{% ativo '/estoque/entrada' %}" href="{% url 'estoque:entrada' %}">{% icone "entrada" %} Lançar entrada</a>
+      <a class="{% ativo '/estoque/transferencia' %}" href="{% url 'estoque:transferencia' %}">{% icone "transferir" %} Transferência</a>
+      <a class="{% ativo '/estoque/ajuste' %}" href="{% url 'estoque:ajuste' %}">{% icone "ajuste" %} Ajuste de inventário</a>
+    </div>
+  </details>
+
+  <details {% if '/vendas/' in request.path %}open{% endif %}>
+    <summary>{% icone "vendas" %} Vendas {% icone "baixo" "ic seta" %}</summary>
+    <div class="sub">
+      <a class="{% if request.path == '/vendas/' or request.path|slice:':8' == '/vendas/' and request.path != '/vendas/novo/' and '/fretes' not in request.path %}ativo{% endif %}" href="{% url 'vendas:lista' %}">{% icone "vendas" %} Pedidos de venda</a>
+      <a class="{% ativo '/vendas/novo' %}" href="{% url 'vendas:novo' %}">{% icone "mais" %} Novo pedido</a>
+      <a class="{% ativo '/vendas/fretes' %}" href="{% url 'web:fretes' %}">{% icone "frete" %} Tabela de frete</a>
+    </div>
+  </details>
+
+  <details {% if '/contratos/' in request.path %}open{% endif %}>
+    <summary>{% icone "contratos" %} Contratos {% icone "baixo" "ic seta" %}</summary>
+    <div class="sub">
+      <a class="{% if request.GET.tipo == 'V' %}ativo{% endif %}" href="{% url 'web:contratos' %}?tipo=V&situacao=ABERTO">{% icone "contratos" %} Contratos de venda</a>
+      <a class="{% if request.GET.tipo == 'C' %}ativo{% endif %}" href="{% url 'web:contratos' %}?tipo=C&situacao=ABERTO">{% icone "contratos" %} Contratos de compra</a>
+    </div>
+  </details>
+
+  <details {% if '/fiscal/' in request.path %}open{% endif %}>
+    <summary>{% icone "fiscal" %} Fiscal {% icone "baixo" "ic seta" %}</summary>
+    <div class="sub">
+      <a class="{% if request.GET.direcao == 'S' %}ativo{% endif %}" href="{% url 'web:notas' %}?direcao=S">{% icone "saida" %} Notas de saída</a>
+      <a class="{% if request.GET.direcao == 'E' %}ativo{% endif %}" href="{% url 'web:notas' %}?direcao=E">{% icone "entrada" %} Notas de entrada</a>
+      <a class="{% if request.GET.direcao == 'CTE' %}ativo{% endif %}" href="{% url 'web:notas' %}?direcao=CTE">{% icone "frete" %} CT-e (fretes)</a>
+    </div>
+  </details>
+
+  <div class="rotulo">Sistema</div>
+  {% if user.is_staff %}<a class="item" href="{% url 'admin:index' %}">{% icone "config" %} Administração</a>{% endif %}
+</nav>
+<div class="cortina" id="cortina"></div>
+
+<main class="conteudo">
+  <div class="cabecalho">
+    <h1>{% block icone_titulo %}{% icone "painel" %}{% endblock %} {% block titulo_pagina %}{% endblock %}</h1>
+    <div class="trilha">
+      <a href="{% url 'web:painel' %}">{% icone "inicio" %} Início</a>
+      {% block trilha %}{% endblock %}
+    </div>
+  </div>
+  <div class="pagina">
+    {% if ha_exemplos %}
+    <div class="aviso exemplo">{% icone "alerta" %}<div>Há <b>pedidos e fretes de exemplo</b> (inventados) misturados aos dados reais. Para tirar: <code>python manage.py carregar_exemplos --apagar</code></div></div>
+    {% endif %}
+    {% for m in messages %}<div class="aviso {{ m.tags }}">{% if m.tags == 'error' %}{% icone "alerta" %}{% else %}{% icone "ok" %}{% endif %}<div>{{ m }}</div></div>{% endfor %}
+    {% block conteudo %}{% endblock %}
+  </div>
 </main>
+
+<script>
+(function () {
+  var corpo = document.body, botao = document.getElementById("alternar-menu");
+  if (document.documentElement.classList.contains("pre-fechado")) corpo.classList.add("menu-fechado");
+  botao.addEventListener("click", function () {
+    if (innerWidth <= 900) { corpo.classList.toggle("menu-aberto"); return; }
+    corpo.classList.toggle("menu-fechado");
+    try { localStorage.setItem("menu", corpo.classList.contains("menu-fechado") ? "fechado" : "aberto"); } catch (e) {}
+  });
+  document.getElementById("cortina").addEventListener("click", function () { corpo.classList.remove("menu-aberto"); });
+  // Fecha o menu "Mais ações" ao clicar fora
+  document.addEventListener("click", function (e) {
+    document.querySelectorAll("details.menu-acoes[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); });
+  });
+})();
+</script>
 </body>
 </html>

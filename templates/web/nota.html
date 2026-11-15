@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}NF {{ n.numero|stringformat:"d" }}{% endblock %}
+{% block icone_titulo %}{% icone "fiscal" %}{% endblock %}
+{% block titulo_pagina %}{{ n.get_modelo_display }} {{ n.numero|stringformat:"d" }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'web:notas' %}?direcao={% if n.modelo == '57' %}CTE{% else %}{{ n.direcao }}{% endif %}">Fiscal</a> {% icone "direita" %} <b>{{ n.numero|stringformat:"d" }}</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes"><a class="botao claro" href="javascript:history.back()">{% icone "voltar" %} Voltar</a><span class="espaco"></span>
+  {% if n.cancelada %}<span class="etiqueta vermelho">Cancelada</span>{% else %}<span class="etiqueta verde">Autorizada</span>{% endif %}</div>
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "fiscal" %} Dados da <b>nota</b></h2><p>{{ n.get_direcao_display }} · importada do ERP antigo{% if n.importada_em %} em {{ n.importada_em|date:"d/m/Y H:i" }}{% endif %}</p></div></div>
+  <div class="corpo"><div class="dados">
+    <div><span>{% if n.direcao == "S" %}Destinatário{% else %}Emitente{% endif %}</span><b><a href="{% url 'web:parceiro' n.parceiro_id %}">{{ n.parceiro.razao_social }}</a></b></div>
+    <div><span>Emissão</span><b>{{ n.data_emissao|date:"d/m/Y" }}</b></div>
+    <div><span>CFOP</span><b>{{ n.cfop|default:"—" }}</b></div>
+    <div><span>Pedido do cliente</span><b>{{ n.pedido_cliente|default:"—" }}</b></div>
+    <div class="campo inteiro" style="grid-column:1/-1"><span>Chave de acesso</span><b style="font-family:monospace;font-size:13px">{{ n.chave|default:"—" }}</b></div>
+    {% if n.motivo_cancelamento %}<div style="grid-column:1/-1"><span>Motivo do cancelamento</span><b>{{ n.motivo_cancelamento }}</b></div>{% endif %}
+  </div></div>
+  <div class="resumo">
+    <div><span>Valor total</span><b>R$ {{ n.valor_total|brl }}</b></div>
+    <div><span>ICMS</span><b>R$ {{ n.valor_icms|brl }}</b></div>
+    <div><span>PIS + COFINS</span><b>R$ {{ n.valor_pis|add:n.valor_cofins|brl }}</b></div>
+    <div><span>IPI</span><b>R$ {{ n.valor_ipi|brl }}</b></div>
+    <div><span>Frete</span><b>R$ {{ n.valor_frete|brl }}</b></div>
+  </div>
+</div>
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "produto" %} <b>Itens</b></h2></div></div>
+  <div class="tabela-caixa"><table class="tabela"><thead><tr><th>#</th><th>Produto</th><th>Un.</th><th class="num">Quantidade</th><th class="num">Unitário (R$)</th><th class="num">Total (R$)</th><th>Contrato</th></tr></thead>
+    <tbody>{% for i in itens %}<tr><td>{{ i.item }}</td><td>{{ i.descricao }}{% if i.codigo_produto_legado %}<span class="sub">cód. antigo {{ i.codigo_produto_legado }}</span>{% endif %}</td><td>{{ i.unidade }}</td>
+      <td class="num">{{ i.quantidade|num:2 }}</td><td class="num">{{ i.preco_unitario|num:4 }}</td><td class="num">{{ i.valor_total|brl }}</td>
+      <td>{% if i.contrato %}<a href="{% url 'web:contrato' i.contrato_id %}">{{ i.contrato.numero }}</a>{% else %}<span class="suave">—</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Sem itens.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

@@ -42,6 +42,18 @@ class NotaFiscal(models.Model):
     motivo_cancelamento = models.CharField(max_length=200, blank=True)
     observacao = models.TextField("observação", blank=True)
 
+    # Rastreabilidade com o ERP antigo
+    origem_legado = models.CharField(
+        max_length=60, blank=True, unique=True, null=True,
+        help_text="Identificador do registro no ERP antigo (evita importar duas vezes).",
+    )
+    situacao_legado = models.CharField(max_length=5, blank=True)
+    pedido_cliente = models.CharField(
+        "pedido/contrato do cliente", max_length=30, blank=True,
+        help_text="Número que o ERP antigo grava na nota (ex.: JT-0611/2026, P1501).",
+    )
+    importada_em = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-data_emissao", "-numero"]
         verbose_name = "nota fiscal"
@@ -57,6 +69,7 @@ class NotaItem(models.Model):
     nota = models.ForeignKey(NotaFiscal, on_delete=models.CASCADE, related_name="itens")
     item = models.PositiveIntegerField()
     produto = models.ForeignKey(Produto, on_delete=models.PROTECT, null=True, blank=True)
+    codigo_produto_legado = models.CharField(max_length=30, blank=True)
     descricao = models.CharField("descrição", max_length=200)
     unidade = models.CharField(max_length=6, blank=True)
     quantidade = models.DecimalField(max_digits=14, decimal_places=4)

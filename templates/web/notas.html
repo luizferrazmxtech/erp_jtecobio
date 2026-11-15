@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block icone_titulo %}{% icone "fiscal" %}{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'web:notas' %}?direcao={{ direcao }}">Fiscal</a> {% icone "direita" %} <b>Listar</b>{% endblock %}
+{% block conteudo %}
+<div class="aviso info">{% icone "alerta" %}<div>As notas continuam sendo emitidas no ERP antigo. Aqui elas aparecem depois de rodar <code>python manage.py importar_legado</code> com o backup mais recente.</div></div>
+<form class="cartao filtros" method="get">
+  <input type="hidden" name="direcao" value="{{ direcao }}">
+  <div class="campos">
+    <div class="campo"><label>Número</label><input name="numero" value="{{ request.GET.numero }}" inputmode="numeric"></div>
+    <div class="campo largo"><label>{% if direcao == "S" %}Cliente{% else %}Emitente{% endif %} ou pedido do cliente</label><input name="busca" value="{{ request.GET.busca }}" placeholder="Nome, fantasia ou nº do pedido"></div>
+    <div class="campo"><label>Situação</label><select name="situacao"><option value="">Todas</option><option value="validas" {% if request.GET.situacao == "validas" %}selected{% endif %}>Válidas</option><option value="canceladas" {% if request.GET.situacao == "canceladas" %}selected{% endif %}>Canceladas</option></select></div>
+    <div class="campo largo"><label>Emissão</label><div class="intervalo"><input type="date" name="de" value="{{ request.GET.de }}"><span class="suave">a</span><input type="date" name="ate" value="{{ request.GET.ate }}"></div></div>
+    <div class="campo"><label>CFOP começa com</label><input name="cfop" value="{{ request.GET.cfop }}" placeholder="Ex.: 51, 6102"></div>
+    <div class="campo"><label>Produto</label><select name="produto"><option value="">Todos</option>{% for p in produtos %}<option value="{{ p.pk }}" {% if request.GET.produto == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.nome|truncatechars:40 }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?direcao={{ direcao }}">{% icone "limpar" %} Limpar</a></div>
+</form>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Nº</th><th>Emissão</th><th>{% if direcao == "S" %}Destinatário{% else %}Emitente{% endif %}</th><th>CFOP</th><th>Pedido</th><th class="num">Valor (R$)</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for n in pagina %}
+      <tr>
+        <td><a class="forte" href="{% url 'web:nota' n.pk %}">{{ n.numero|stringformat:"d" }}</a>{% if n.serie %}<span class="sub">série {{ n.serie }}</span>{% endif %}</td>
+        <td class="nowrap">{{ n.data_emissao|date:"d/m/Y" }}</td>
+        <td><a class="forte" href="{% url 'web:parceiro' n.parceiro_id %}">{{ n.parceiro.razao_social|truncatechars:40 }}</a><span class="sub">{{ n.parceiro.cidade|title }}{% if n.parceiro.uf %}/{{ n.parceiro.uf }}{% endif %}</span></td>
+        <td>{{ n.cfop|default:"—" }}</td>
+        <td>{{ n.pedido_cliente|default:"—" }}</td>
+        <td class="num">{{ n.valor_total|brl }}</td>
+        <td>{% if n.cancelada %}<span class="etiqueta vermelho">Cancelada</span>{% elif n.situacao_legado == "D" %}<span class="etiqueta amarelo">Devolução/retorno</span>{% elif n.situacao_legado == "S" %}<span class="etiqueta azul">Remessa</span>{% else %}<span class="etiqueta verde">Autorizada</span>{% endif %}</td>
+        <td class="acoes"><a class="acao" title="Ver" href="{% url 'web:nota' n.pk %}">{% icone "buscar" %}</a></td>
+      </tr>
+    {% empty %}<tr><td colspan="8" class="vazio">Nenhuma nota encontrada. Já rodou a importação do ERP antigo?</td></tr>{% endfor %}</tbody>
+    {% if pagina.paginator.count %}<tfoot><tr><td colspan="5">Total das notas válidas nos filtros</td><td class="num">{{ total|brl }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+  </table></div>
+  {% include "web/_paginacao.html" %}
+</div>
+{% endblock %}

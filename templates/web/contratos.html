@@ -1,0 +1,51 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block icone_titulo %}{% icone "contratos" %}{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'web:contratos' %}">Contratos</a> {% icone "direita" %} <b>Listar</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes">
+  <a class="botao" href="{% url 'web:adicionar' 'contrato' %}{% if tipo %}?tipo={{ tipo }}{% endif %}">{% icone "mais" %} Adicionar</a>
+  <details class="menu-acoes"><summary class="botao claro">{% icone "config" %} Mais ações {% icone "baixo" %}</summary>
+    <div class="lista">
+      <a href="{% url 'web:contratos' %}?tipo=V&situacao=ABERTO&com_saldo=1">{% icone "saida" %} Vendas com saldo a entregar</a>
+      <a href="{% url 'web:contratos' %}?tipo=C&situacao=ABERTO&com_saldo=1">{% icone "entrada" %} Compras com saldo a receber</a>
+      <a href="{% url 'admin:contratos_contrato_changelist' %}">{% icone "config" %} Abrir na administração</a>
+    </div></details>
+</div>
+
+<form class="cartao filtros" method="get">
+  <div class="campos">
+    <div class="campo"><label>Tipo</label><select name="tipo"><option value="">Compra e venda</option><option value="V" {% if request.GET.tipo == "V" %}selected{% endif %}>Venda</option><option value="C" {% if request.GET.tipo == "C" %}selected{% endif %}>Compra</option></select></div>
+    <div class="campo"><label>Situação</label><select name="situacao"><option value="">Todas</option>{% for v, r in situacoes %}<option value="{{ v }}" {% if request.GET.situacao == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="campo largo"><label>Cliente, fornecedor ou nº do contrato</label><input name="busca" value="{{ request.GET.busca }}" placeholder="Ex.: Aroma, 9291"></div>
+    <div class="campo largo"><label>Produto</label><select name="produto"><option value="">Todos</option>{% for p in produtos %}<option value="{{ p.pk }}" {% if request.GET.produto == p.pk|stringformat:"s" %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Modalidade</label><select name="modalidade"><option value="">Todas</option>{% for v, r in modalidades %}<option value="{{ v }}" {% if request.GET.modalidade == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="campo marcar"><input type="checkbox" id="com_saldo" name="com_saldo" value="1" {% if request.GET.com_saldo %}checked{% endif %}><label for="com_saldo">Só com saldo</label></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?{% if tipo %}tipo={{ tipo }}{% endif %}">{% icone "limpar" %} Limpar</a></div>
+</form>
+
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Contrato</th><th>{% if tipo == "C" %}Fornecedor{% elif tipo == "V" %}Cliente{% else %}Parceiro{% endif %}</th><th>Produto</th><th>Mês</th>
+      <th class="num">Contratado (kg)</th><th class="num">Saldo (kg)</th><th>Entregue</th><th class="num">Preço (R$/kg)</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for c in pagina %}
+      <tr>
+        <td><a class="forte" href="{% url 'web:contrato' c.pk %}">{{ c.numero }}</a><span class="sub">{{ c.get_tipo_display }} · {{ c.get_modalidade_display }}</span></td>
+        <td><a class="forte" href="{% url 'web:parceiro' c.parceiro_id %}">{{ c.parceiro|truncatechars:34 }}</a><span class="sub">{{ c.parceiro.cidade|title }}{% if c.parceiro.uf %}/{{ c.parceiro.uf }}{% endif %}</span></td>
+        <td>{{ c.produto.nome|truncatechars:30 }}</td>
+        <td class="nowrap">{{ c.mes_referencia|date:"m/Y" }}</td>
+        <td class="num">{{ c.quantidade_kg|kg }}</td>
+        <td class="num"><b>{{ c.saldo|kg }}</b></td>
+        <td style="min-width:110px"><div class="progresso {% if c.tipo == 'V' %}azul{% endif %}"><span style="width:{{ c.quantidade_entregue|porcento:c.quantidade_kg }}%"></span></div><span class="pequeno suave">{{ c.quantidade_entregue|porcento:c.quantidade_kg }}%</span></td>
+        <td class="num">{{ c.preco_unitario|num:4 }}</td>
+        <td>{% situacao c.status %}</td>
+        <td class="acoes"><span class="acoes-linha"><a class="acao" title="Ver" href="{% url 'web:contrato' c.pk %}">{% icone "buscar" %}</a><a class="acao" title="Editar" href="{% url 'web:editar' 'contrato' c.pk %}">{% icone "editar" %}</a></span></td>
+      </tr>
+    {% empty %}<tr><td colspan="10" class="vazio">Nenhum contrato encontrado com esses filtros.</td></tr>{% endfor %}</tbody>
+    {% if pagina.paginator.count %}<tfoot><tr><td colspan="4">Total dos filtros</td><td class="num">{{ totais.qtd|kg }}</td><td class="num">{{ totais.saldo|kg }}</td><td colspan="4"></td></tr></tfoot>{% endif %}
+  </table></div>
+  {% include "web/_paginacao.html" %}
+</div>
+{% endblock %}

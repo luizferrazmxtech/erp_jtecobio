@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Locais e tanques{% endblock %}
+{% block icone_titulo %}{% icone "local" %}{% endblock %}
+{% block titulo_pagina %}Locais e tanques{% endblock %}
+{% block trilha %}{% icone "direita" %} <b>Locais e tanques</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes">
+  <a class="botao" href="{% url 'web:adicionar' 'local' %}">{% icone "mais" %} Adicionar local</a>
+  <a class="botao claro" href="{% url 'web:adicionar' 'tanque' %}">{% icone "tanque" %} Adicionar tanque</a>
+</div>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Local</th><th>Tipo</th><th>Dono</th><th>Tanques (produto · capacidade)</th><th class="num">Saldo (kg)</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for l in lista %}<tr>
+      <td><b>{{ l.local.nome }}</b><span class="sub">{{ l.local.cidade|title }}{% if l.local.uf %}/{{ l.local.uf }}{% endif %}</span></td>
+      <td class="pequeno">{{ l.local.get_tipo_display }}</td>
+      <td>{% if l.local.parceiro %}<a class="forte" href="{% url 'web:parceiro' l.local.parceiro_id %}">{{ l.local.parceiro|truncatechars:30 }}</a>{% else %}<span class="suave">—</span>{% endif %}</td>
+      <td class="pequeno">{% for t in l.tanques %}<div><a href="{% url 'web:editar' 'tanque' t.pk %}">{{ t.produto.nome|truncatechars:34 }}</a> · {{ t.capacidade_kg|kg }} kg{% if "estimada" in t.identificacao %} <span class="etiqueta amarelo sem-ponto">estimada</span>{% endif %}</div>{% empty %}<span class="suave">Nenhum tanque</span>{% endfor %}</td>
+      <td class="num">{% for s in l.saldos %}<div>{{ s.saldo|kg }}</div>{% empty %}—{% endfor %}</td>
+      <td class="acoes"><a class="acao" title="Editar" href="{% url 'web:editar' 'local' l.local.pk %}">{% icone "editar" %}</a></td></tr>
+    {% empty %}<tr><td colspan="6" class="vazio">Nenhum local cadastrado.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}
