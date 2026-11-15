@@ -63,7 +63,7 @@
 
 <div class="grade g-7-5 mb">
   <div class="cartao">
-    <div class="titulo"><div><h2>{% icone "grafico" %} Veja suas <b>vendas</b></h2><p>Faturamento das NF-e dos últimos 12 meses, sem as canceladas. Passe o mouse em um mês para ver o detalhe.</p></div>
+    <div class="titulo"><div><h2>{% icone "grafico" %} Veja suas <b>vendas</b></h2><p>Faturamento das NF-e dos últimos 12 meses, sem as canceladas, mais as ordens de serviço concluídas. Passe o mouse em um mês para ver o detalhe.</p></div>
       <span class="suave pequeno nowrap">12 meses: <b>R$ {{ grafico.total|brl }}</b></span></div>
     <div class="corpo">
       <div class="legenda-grafico">
@@ -85,6 +85,7 @@
               <b>{{ c.rotulo }}</b>
               <div><em><i class="cor-vendas"></i> Vendas</em> <span>R$ {{ c.vendas|brl }}</span></div>
               <div><em><i class="cor-servicos"></i> Serviços (envase)</em> <span>R$ {{ c.servicos|brl }}</span></div>
+              {% if c.ordens %}<div class="sub-dica"><em>das quais OS sem nota</em> <span>R$ {{ c.ordens|brl }}</span></div>{% endif %}
               <div class="total">Total <span>R$ {{ c.total|brl }}</span></div>
             </div>
           </div>
