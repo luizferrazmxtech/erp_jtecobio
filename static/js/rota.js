@@ -122,6 +122,11 @@
     texto(t, ".v-efetivo-net", efn, 4);
     texto(t, ".v-sobra", ef === null ? null : preco - ef, 4);
     texto(t, ".v-sobra-net", efn === null ? null : precoNet - efn, 4);
+    // Margem bruta − margem net = imposto da venda − créditos (produto e frete).
+    var impVenda = preco - precoNet, creditos = t.custo * (1 - fatorCompra) + (f || 0) * (1 - fatorFrete);
+    t.el.querySelector(".v-imposto").textContent = ef === null ? "" :
+      "Imposto a pagar R$ " + fmt(impVenda - creditos, 4) + "/kg = imposto da venda R$ " + fmt(impVenda, 4) +
+      " − créditos R$ " + fmt(creditos, 4);
     t.el.classList.toggle("sem-frete", ef === null);
     t.el.classList.toggle("escolhido", sai > 0);
     t.el.classList.toggle("sugerido", sugerido);
@@ -211,6 +216,7 @@
     escrever("p-custo-net", tem ? custoNet : null, 2);
     escrever("p-margem", tem ? margem : null, 2);
     escrever("p-margem-net", tem ? margemNet : null, 2);
+    escrever("p-imposto", tem ? margem - margemNet : null, 2);
     escrever("p-margem-net-kg", tem ? margemNet / alocado : null, 4);
     document.getElementById("p-margem-b").className = margemNet < 0 ? "negativo" : "positivo";
     desenharRota(escolhidos);

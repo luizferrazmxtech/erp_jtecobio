@@ -10,6 +10,7 @@ urlpatterns = [
     path("vendas/fretes/", views.fretes, name="fretes"),
     path("contratos/", views.contratos, name="contratos"),
     path("contratos/<int:pk>/", views.contrato, name="contrato"),
+    path("contratos/<int:pk>/notas/", views.contrato_ligar_nota, name="contrato_ligar_nota"),
     path("fiscal/", views.notas, name="notas"),
     path("fiscal/<int:pk>/", views.nota, name="nota"),
     path("cadastros/parceiros/", views.parceiros, name="parceiros"),

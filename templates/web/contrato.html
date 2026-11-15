@@ -31,10 +31,18 @@
 </div>
 <div class="grade g2">
   <div class="cartao">
-    <div class="titulo"><div><h2>{% icone "fiscal" %} Notas que <b>abatem</b> este contrato</h2><p>Ligue as notas ao contrato pela administração (itens de nota).</p></div></div>
-    <div class="tabela-caixa"><table class="tabela"><thead><tr><th>NF</th><th>Data</th><th class="num">kg</th><th class="num">Valor (R$)</th></tr></thead>
-      <tbody>{% for i in itens %}<tr><td><a class="forte" href="{% url 'web:nota' i.nota_id %}">{{ i.nota.numero|stringformat:"d" }}</a>{% if i.nota.cancelada %} {% situacao "CANC" %}{% endif %}</td><td>{{ i.nota.data_emissao|date:"d/m/Y" }}</td><td class="num">{{ i.quantidade|kg }}</td><td class="num">{{ i.valor_total|brl }}</td></tr>
-      {% empty %}<tr><td colspan="4" class="vazio">Nenhuma nota ligada ainda.</td></tr>{% endfor %}</tbody></table></div>
+    <div class="titulo"><div><h2>{% icone "fiscal" %} Notas que <b>abatem</b> este contrato</h2><p>O saldo do contrato desconta as notas ligadas aqui.</p></div></div>
+    <div class="tabela-caixa"><table class="tabela"><thead><tr><th>NF</th><th>Data</th><th class="num">kg</th><th class="num">Valor (R$)</th><th class="acoes"></th></tr></thead>
+      <tbody>{% for i in itens %}<tr><td><a class="forte" href="{% url 'web:nota' i.nota_id %}">{{ i.nota.numero|stringformat:"d" }}</a>{% if i.nota.cancelada %} {% situacao "CANC" %}{% endif %}</td><td>{{ i.nota.data_emissao|date:"d/m/Y" }}</td><td class="num">{{ i.quantidade|kg }}</td><td class="num">{{ i.valor_total|brl }}</td>
+        <td class="acoes">{% if pode_ligar %}<form method="post" action="{% url 'web:contrato_ligar_nota' c.pk %}">{% csrf_token %}<input type="hidden" name="item" value="{{ i.pk }}"><input type="hidden" name="acao" value="desligar"><button class="acao" title="Desligar desta nota">{% icone "fechar" %}</button></form>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="5" class="vazio">Nenhuma nota ligada ainda.</td></tr>{% endfor %}</tbody></table></div>
+    {% if pode_ligar %}
+    <div class="titulo" style="border-top:1px solid var(--borda)"><div><h2>{% icone "mais" %} Notas que <b>podem ser ligadas</b></h2><p>Notas de {{ c.get_tipo_display|lower }} de {{ c.parceiro }} com {{ c.produto }} que ainda não abatem nenhum contrato.</p></div></div>
+    <div class="tabela-caixa"><table class="tabela"><thead><tr><th>NF</th><th>Data</th><th class="num">kg</th><th class="num">Valor (R$)</th><th class="acoes"></th></tr></thead>
+      <tbody>{% for i in livres %}<tr><td><a class="forte" href="{% url 'web:nota' i.nota_id %}">{{ i.nota.numero|stringformat:"d" }}</a></td><td>{{ i.nota.data_emissao|date:"d/m/Y" }}</td><td class="num">{{ i.quantidade|kg }}</td><td class="num">{{ i.valor_total|brl }}</td>
+        <td class="acoes"><form method="post" action="{% url 'web:contrato_ligar_nota' c.pk %}">{% csrf_token %}<input type="hidden" name="item" value="{{ i.pk }}"><button class="botao claro pequeno">{% icone "mais" %} Ligar</button></form></td></tr>
+      {% empty %}<tr><td colspan="5" class="vazio">Nenhuma nota livre deste parceiro com este produto.</td></tr>{% endfor %}</tbody></table></div>
+    {% endif %}
   </div>
   <div class="cartao">
     <div class="titulo"><div><h2>{% icone "vendas" %} <b>Pedidos</b> deste contrato</h2></div></div>

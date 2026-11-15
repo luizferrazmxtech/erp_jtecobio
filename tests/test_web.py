@@ -135,3 +135,33 @@ def test_pedido_mostra_tanques_com_custo_efetivo_e_rota_sugerida(logado, dados, 
     assert pagina.count('class="origem') == 2
     assert 'data-sugerido="40000' in pagina and 'data-sugerido="20000' in pagina
     assert "js/rota.js" in pagina
+
+
+def test_pedido_novo_so_lista_contratos_do_cliente(logado, dados, glicerina):
+    outro = Parceiro.objects.create(razao_social="OUTRO CLIENTE", eh_cliente=True, uf="SP")
+    Contrato.objects.create(numero="OUTRO-1", tipo="V", parceiro=outro, produto=glicerina, quantidade_kg=1000,
+                            preco_unitario="5", mes_referencia=date(2026, 11, 1))
+    from apps.vendas.forms import PedidoForm
+
+    form = PedidoForm(initial={"cliente": dados["cliente"].pk})
+    assert list(form.fields["contrato"].queryset) == [dados["contrato"]]
+    assert not PedidoForm().fields["contrato"].queryset.exists()  # sem cliente, nenhum contrato
+    html = logado.get(f"/vendas/novo/?cliente={dados['cliente'].pk}").content.decode()
+    assert "OUTRO-1" in html  # está na lista que a tela filtra ao trocar o cliente…
+    assert 'value="' + str(dados["contrato"].pk) + '">9291' in html  # …mas no seletor só o do cliente
+
+
+def test_ligar_e_desligar_nota_no_contrato(logado, dados, glicerina):
+    c = dados["contrato"]
+    nota = NotaFiscal.objects.create(direcao="S", numero=4020, parceiro=dados["cliente"], data_emissao=DIA)
+    item = NotaItem.objects.create(nota=nota, item=1, produto=glicerina, descricao="GLICERINA", quantidade=10000)
+    assert "4020" in logado.get(f"/contratos/{c.pk}/").content.decode()
+    logado.post(f"/contratos/{c.pk}/notas/", {"item": item.pk})
+    assert Contrato.objects.com_saldo().get(pk=c.pk).saldo == Decimal("110000")
+    logado.post(f"/contratos/{c.pk}/notas/", {"item": item.pk, "acao": "desligar"})
+    assert Contrato.objects.com_saldo().get(pk=c.pk).saldo == Decimal("120000")
+
+
+def test_menu_sem_administracao(logado, dados):
+    html = logado.get("/").content.decode()
+    assert "Administração" not in html and "Usuários e acessos" in html
