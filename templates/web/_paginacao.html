@@ -1,0 +1,8 @@
+{% load erp %}<div class="rodape-tabela">
+  <span>{% if pagina.paginator.count %}Mostrando {{ pagina.start_index }} a {{ pagina.end_index }} de {{ pagina.paginator.count }}{% else %}Nenhum registro{% endif %}</span>
+  {% if pagina.has_other_pages %}<div class="paginacao">
+    {% if pagina.has_previous %}<a href="{% url_com pagina=pagina.previous_page_number %}">‹</a>{% endif %}
+    {% for n in pagina.paginator.page_range %}{% if n == pagina.number %}<span class="atual">{{ n }}</span>{% elif n > pagina.number|add:"-3" and n < pagina.number|add:"3" or n == 1 or n == pagina.paginator.num_pages %}<a href="{% url_com pagina=n %}">{{ n }}</a>{% endif %}{% endfor %}
+    {% if pagina.has_next %}<a href="{% url_com pagina=pagina.next_page_number %}">›</a>{% endif %}
+  </div>{% endif %}
+</div>

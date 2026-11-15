@@ -1,41 +1,42 @@
-{% extends "base.html" %}{% load humanize %}
+{% extends "base.html" %}{% load erp %}
 {% block titulo %}Saldos de estoque{% endblock %}
+{% block icone_titulo %}{% icone "estoque" %}{% endblock %}
+{% block titulo_pagina %}Saldos por tanque{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'estoque:saldos' %}">Estoque</a> {% icone "direita" %} <b>Saldos</b>{% endblock %}
 {% block conteudo %}
-<h1>Saldos por local</h1>
-<p class="suave">Método de custo: {{ metodo }}. O saldo é a soma das movimentações; para corrigir, lance um ajuste de inventário.</p>
-<div class="acoes">
-  <a href="{% url 'estoque:entrada' %}">+ Entrada</a>
-  <a href="{% url 'estoque:saida' %}">− Saída</a>
-  <a href="{% url 'estoque:transferencia' %}">⇄ Transferência</a>
-  <a href="{% url 'estoque:ajuste' %}">Ajuste de inventário</a>
+<div class="barra-acoes">
+  <a class="botao" href="{% url 'estoque:entrada' %}">{% icone "entrada" %} Entrada</a>
+  <a class="botao claro" href="{% url 'estoque:saida' %}">{% icone "saida" %} Saída</a>
+  <a class="botao claro" href="{% url 'estoque:transferencia' %}">{% icone "transferir" %} Transferência</a>
+  <a class="botao claro" href="{% url 'estoque:ajuste' %}">{% icone "ajuste" %} Ajuste de inventário</a>
+  <span class="espaco"></span><span class="suave pequeno">Método de custo: <b>{{ metodo }}</b></span>
 </div>
-<form method="get" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
-  <select name="produto"><option value="">Todos os produtos</option>
-    {% for p in produtos %}<option value="{{ p.pk }}" {% if p == produto_sel %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
-  <select name="local"><option value="">Todos os locais</option>
-    {% for l in locais %}<option value="{{ l.pk }}" {% if l == local_sel %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
-  <button>Filtrar</button>
+<form class="cartao filtros" method="get">
+  <div class="campos">
+    <div class="campo largo"><label>Produto</label><select name="produto"><option value="">Todos</option>{% for p in produtos %}<option value="{{ p.pk }}" {% if p == produto_sel %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></div>
+    <div class="campo largo"><label>Local</label><select name="local"><option value="">Todos</option>{% for l in locais %}<option value="{{ l.pk }}" {% if l == local_sel %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?">{% icone "limpar" %} Limpar</a></div>
 </form>
-<table>
-  <thead><tr><th>Produto</th><th>Local</th><th class="num">Saldo (kg)</th><th class="num">Custo médio (R$/kg)</th><th class="num">Valor (R$)</th></tr></thead>
-  <tbody>
-  {% for l in linhas %}
-    <tr><td>{{ l.produto }}</td><td>{{ l.local }}{% if l.local.eh_de_terceiros %} <span class="suave">(de cliente)</span>{% endif %}</td>
-      <td class="num">{{ l.quantidade_kg|floatformat:0|intcomma }}</td>
-      <td class="num">{{ l.custo_medio|floatformat:4 }}</td>
-      <td class="num">{{ l.valor|floatformat:2|intcomma }}</td></tr>
-  {% empty %}<tr><td colspan="5" class="suave">Nenhum saldo. Comece lançando uma entrada ou o saldo inicial.</td></tr>
-  {% endfor %}
-  </tbody>
-  {% if linhas %}<tfoot><tr><td colspan="2">Total (valor sem produto de clientes)</td><td class="num">{{ total_kg|floatformat:0|intcomma }}</td><td></td><td class="num">{{ total_valor|floatformat:2|intcomma }}</td></tr></tfoot>{% endif %}
-</table>
-
-<h2 style="margin-top:32px">Últimas movimentações</h2>
-<table>
-  <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Local</th><th class="num">kg</th><th>Documento</th><th>Usuário</th></tr></thead>
-  <tbody>{% for m in ultimas %}
-    <tr><td>{{ m.data|date:"d/m/Y" }}</td><td>{{ m.get_tipo_display }}</td><td>{{ m.produto }}</td><td>{{ m.local }}</td>
-    <td class="num">{{ m.quantidade_kg|floatformat:0|intcomma }}</td><td>{{ m.documento }}</td><td>{{ m.usuario|default:"" }}</td></tr>
-  {% empty %}<tr><td colspan="7" class="suave">Sem movimentações.</td></tr>{% endfor %}</tbody>
-</table>
+<div class="cartao mb">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Produto</th><th>Local</th><th class="num">Saldo (kg)</th><th class="num">Custo médio (R$/kg)</th><th class="num">Valor (R$)</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for l in linhas %}
+      <tr><td>{{ l.produto }}</td><td><b>{{ l.local }}</b>{% if l.local.eh_de_terceiros %} <span class="etiqueta amarelo sem-ponto">de cliente</span>{% endif %}<span class="sub">{{ l.local.get_tipo_display }}</span></td>
+        <td class="num"><b>{{ l.quantidade_kg|kg }}</b></td><td class="num">{{ l.custo_medio|num:4 }}</td><td class="num">{{ l.valor|brl }}</td>
+        <td class="acoes"><a class="acao" title="Movimentações" href="{% url 'web:movimentacoes' %}?produto={{ l.produto.pk }}&local={{ l.local.pk }}">{% icone "buscar" %}</a></td></tr>
+    {% empty %}<tr><td colspan="6" class="vazio">Nenhum saldo. Carregue a planilha (<code>python manage.py carregar_planilha</code>) ou lance uma entrada.</td></tr>{% endfor %}</tbody>
+    {% if linhas %}<tfoot><tr><td colspan="2">Total (o valor não inclui produto de clientes)</td><td class="num">{{ total_kg|kg }}</td><td></td><td class="num">{{ total_valor|brl }}</td><td></td></tr></tfoot>{% endif %}
+  </table></div>
+</div>
+<div class="cartao">
+  <div class="titulo"><div><h2>{% icone "transferir" %} Últimas <b>movimentações</b></h2></div><a class="botao claro pequeno" href="{% url 'web:movimentacoes' %}">Ver todas</a></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Data</th><th>Tipo</th><th>Produto</th><th>Local</th><th class="num">kg</th><th>Documento</th><th>Usuário</th></tr></thead>
+    <tbody>{% for m in ultimas %}
+      <tr><td class="nowrap">{{ m.data|date:"d/m/Y" }}</td><td><span class="etiqueta {% if m.quantidade_kg > 0 %}verde{% else %}azul{% endif %} sem-ponto">{{ m.get_tipo_display }}</span></td><td>{{ m.produto.nome|truncatechars:34 }}</td><td>{{ m.local }}</td>
+      <td class="num {% if m.quantidade_kg > 0 %}positivo{% else %}negativo{% endif %}">{{ m.quantidade_kg|kg }}</td><td>{{ m.documento|truncatechars:40 }}</td><td>{{ m.usuario|default:"—" }}</td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Sem movimentações.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
 {% endblock %}

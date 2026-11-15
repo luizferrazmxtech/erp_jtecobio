@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block icone_titulo %}{% icone "cadastros" %}{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="?papel={{ papel }}">{{ titulo }}</a> {% icone "direita" %} <b>Listar</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes">
+  <a class="botao" href="{% url 'web:adicionar' 'parceiro' %}?papel={{ papel }}">{% icone "mais" %} Adicionar</a>
+  <details class="menu-acoes"><summary class="botao claro">{% icone "config" %} Mais ações {% icone "baixo" %}</summary>
+    <div class="lista">
+      <a href="?papel=industrializador">{% icone "cadastros" %} Industrializadores</a>
+      <a href="?papel=armazem">{% icone "local" %} Armazéns e distribuidoras</a>
+      <a href="{% url 'admin:cadastros_parceiro_changelist' %}">{% icone "config" %} Abrir na administração</a>
+    </div></details>
+</div>
+<form class="cartao filtros" method="get">
+  <input type="hidden" name="papel" value="{{ papel }}">
+  <div class="campos">
+    <div class="campo largo"><label>Nome, fantasia, cidade ou CNPJ</label><input name="busca" value="{{ request.GET.busca }}" autofocus></div>
+    <div class="campo"><label>UF</label><select name="uf"><option value="">Todas</option>{% for uf in ufs %}<option {% if request.GET.uf == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Situação</label><select name="situacao"><option value="">Ativos</option><option value="inativos" {% if request.GET.situacao == "inativos" %}selected{% endif %}>Inativos</option><option value="todos" {% if request.GET.situacao == "todos" %}selected{% endif %}>Todos</option></select></div>
+    <div class="campo"><label>Ordenar por</label><select name="ordem"><option value="">Nome</option><option value="movimento" {% if request.GET.ordem == "movimento" %}selected{% endif %}>Mais notas</option></select></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?papel={{ papel }}">{% icone "limpar" %} Limpar</a></div>
+</form>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Nome</th><th>CNPJ/CPF</th><th>Cidade</th><th>Papéis</th><th class="num">Notas</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for p in pagina %}
+      <tr><td><a class="forte" href="{% url 'web:parceiro' p.pk %}">{{ p.razao_social|truncatechars:48 }}</a>{% if p.nome_fantasia and p.nome_fantasia != p.razao_social %}<span class="sub">({{ p.nome_fantasia|truncatechars:40 }})</span>{% endif %}</td>
+        <td class="nowrap">{{ p.documento|default:"—" }}</td><td>{{ p.cidade|title|default:"—" }}{% if p.uf %}/{{ p.uf }}{% endif %}</td>
+        <td class="pequeno">{{ p.papeis }}</td><td class="num">{{ p.n_notas }}</td>
+        <td>{% if p.ativo %}<span class="etiqueta verde">Ativo</span>{% else %}<span class="etiqueta cinza">Inativo</span>{% endif %}</td>
+        <td class="acoes"><span class="acoes-linha"><a class="acao" title="Ver" href="{% url 'web:parceiro' p.pk %}">{% icone "buscar" %}</a><a class="acao" title="Editar" href="{% url 'web:editar' 'parceiro' p.pk %}">{% icone "editar" %}</a></span></td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Ninguém encontrado.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% include "web/_paginacao.html" %}
+</div>
+{% endblock %}

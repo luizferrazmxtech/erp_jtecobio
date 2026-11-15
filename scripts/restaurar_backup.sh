@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Restaura o .backup do ERP antigo no banco "legado" (para consulta) e
-# importa/atualiza os clientes no sistema novo.
+# Restaura o .backup do ERP antigo no banco "legado" e importa as novidades.
 #
-# Uso:  scripts/restaurar_backup.sh backups/VivaClean_12h.backup
+# Uso:  scripts/restaurar_backup.sh backups/VivaClean_12h.backup [AAAA-MM-DD]
 #
 # Apaga e recria o banco "legado" a cada execução (ele é só uma cópia
-# para consulta). Do sistema novo, só o cadastro de clientes é tocado.
+# para leitura). O banco "erp" do sistema novo não é tocado aqui, só
+# recebe as notas e cadastros pelo comando importar_legado.
 set -euo pipefail
 
 ARQUIVO="${1:?informe o caminho do arquivo .backup}"
+DESDE="${2:-2000-01-01}"
 NOME=$(basename "$ARQUIVO")
 
 if [ ! -f "$ARQUIVO" ]; then
@@ -28,5 +29,5 @@ echo ">> Restaurando $NOME (pode levar alguns minutos)..."
 # O pg_restore avisa que o schema "public" já existe; é esperado.
 docker compose exec -T db pg_restore -U erp -d legado --no-owner --no-acl -j 4 "/backups/$NOME" || true
 
-echo ">> Importando clientes..."
-python manage.py importar_legado
+echo ">> Importando notas e cadastros desde $DESDE..."
+python manage.py importar_legado --desde "$DESDE"

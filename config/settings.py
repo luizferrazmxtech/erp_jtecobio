@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "apps.estoque",
     "apps.integracao",
     "apps.vendas",
+    "apps.web",
 ]
 
 MIDDLEWARE = [
@@ -72,6 +73,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.web.contexto.exemplos",
             ],
         },
     },
@@ -133,8 +135,10 @@ USE_THOUSAND_SEPARATOR = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
-LOGIN_URL = "admin:login"
-LOGIN_REDIRECT_URL = "estoque:saldos"
+LOGIN_URL = "entrar"
+LOGIN_REDIRECT_URL = "web:painel"
+LOGOUT_REDIRECT_URL = "entrar"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

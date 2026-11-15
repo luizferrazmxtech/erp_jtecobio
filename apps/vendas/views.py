@@ -1,13 +1,17 @@
 import re
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from apps.cadastros.models import Local
+from apps.cadastros.models import Local, Produto
+from apps.contratos.models import Contrato
 from apps.estoque.models import Lote
 
 from . import services
@@ -19,19 +23,42 @@ PODE_VENDER = "vendas.change_pedido"
 
 @login_required
 def lista(request):
-    status = request.GET.get("status", "")
-    pedidos = Pedido.objects.select_related("cliente", "produto")
-    if status:
-        pedidos = pedidos.filter(status=status)
+    f = request.GET
+    pedidos = Pedido.objects.select_related("cliente", "produto", "contrato")
+    if f.get("status"):
+        pedidos = pedidos.filter(status=f["status"])
+    if f.get("busca"):
+        b = f["busca"].strip()
+        filtro = Q(cliente__razao_social__icontains=b) | Q(cliente__nome_fantasia__icontains=b) | Q(contrato__numero__icontains=b)
+        if b.isdigit():
+            filtro |= Q(numero=int(b))
+        pedidos = pedidos.filter(filtro)
+    if f.get("produto"):
+        pedidos = pedidos.filter(produto_id=f["produto"])
+    for campo, filtro in (("de", "data__gte"), ("ate", "data__lte")):
+        try:
+            if f.get(campo):
+                pedidos = pedidos.filter(**{filtro: date.fromisoformat(f[campo])})
+        except ValueError:
+            pass
     return render(request, "vendas/lista.html", {
-        "pedidos": pedidos[:200], "status": status, "opcoes_status": Pedido.Status.choices,
+        "pagina": Paginator(pedidos, 50).get_page(f.get("pagina")),
+        "opcoes_status": Pedido.Status.choices,
+        "produtos": Produto.objects.filter(pedido__isnull=False).distinct(),
     })
 
 
 @login_required
 @permission_required("vendas.add_pedido", raise_exception=True)
 def novo(request):
-    form = PedidoForm(request.POST or None)
+    inicial = {}
+    contrato = Contrato.objects.filter(pk=request.GET.get("contrato") or None).first()
+    if contrato:
+        inicial = {"contrato": contrato.pk, "cliente": contrato.parceiro_id, "produto": contrato.produto_id,
+                   "preco_unitario": contrato.preco_unitario}
+    elif request.GET.get("cliente", "").isdigit():
+        inicial = {"cliente": request.GET["cliente"]}
+    form = PedidoForm(request.POST or None, initial=inicial)
     if request.method == "POST" and form.is_valid():
         pedido = form.save(commit=False)
         pedido.usuario = request.user

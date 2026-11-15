@@ -1,6 +1,6 @@
 # ERP JT Ecobio
 
-Sistema de gestão da JT Ecobio: estoque de glicerina por tanque e distribuidora, contratos de compra e venda com saldo e notas fiscais.
+Sistema de gestão da JT Ecobio: estoque de glicerina por tanque e distribuidora, contratos de compra e venda com saldo, pedidos que puxam de vários tanques, e as notas fiscais do ERP antigo.
 
 Feito em **Python + Django** com banco **PostgreSQL**.
 
@@ -13,15 +13,20 @@ Feito em **Python + Django** com banco **PostgreSQL**.
 | Custo | Custo médio por local **ou** custo por lote, escolhido em *Admin → Configuração* | `apps/estoque/services.py` |
 | Contratos | Contratos de compra e venda; o saldo é calculado pelas notas ligadas ao contrato (notas canceladas não contam) | `apps/contratos` |
 | Notas fiscais | NF-e de entrada e saída e CT-e, com itens e impostos | `apps/fiscal` |
-| Integração | Importa os clientes do backup do ERP antigo; o resto começa do zero | `apps/integracao` |
+| Integração | Importa do backup do ERP antigo clientes, fornecedores, transportadoras, produtos e todas as notas (entrada, saída e CT-e). Carrega saldos por tanque e contratos da planilha DRE do mês | `apps/integracao` |
+| Telas | Painel, estoque, vendas, contratos, notas e cadastros, no estilo do Gestão Click | `apps/web`, `templates/`, `static/css/app.css` |
 | Perfis | Grupos Diretoria, Comercial, Logística e Financeiro | `apps/cadastros/management/commands/criar_perfis.py` |
 | Vendas (fase 2) | Pedido de venda atendido por vários tanques, tabela de frete, sugestão da combinação mais barata (produto + frete), reserva, faturamento com baixa no estoque e margem | `apps/vendas` |
 
-Telas:
+Telas (menu lateral):
 
-- `/estoque/` saldos por produto e local, últimas movimentações e botões de lançamento.
-- `/vendas/` pedidos de venda: novo pedido, escolha das origens, confirmar, faturar.
-- `/admin/` cadastros, contratos, notas fiscais, tabela de frete e consultas.
+- **Painel** (`/`): saldo de cada tanque com o que está reservado, contratos a entregar, vendas dos últimos 12 meses, maiores clientes e últimos pedidos.
+- **Cadastros**: clientes, fornecedores, transportadoras, produtos, locais e tanques (listar, ver, adicionar e editar).
+- **Estoque**: saldos por tanque, movimentações com filtros, entrada, saída, transferência e ajuste.
+- **Vendas**: pedidos (novo, escolha dos tanques, confirmar, faturar) e tabela de frete.
+- **Contratos**: compra e venda com saldo e percentual entregue.
+- **Fiscal**: notas de saída, de entrada e CT-e importados do ERP antigo.
+- **Administração** (`/admin/`): continua disponível para o que ainda não tem tela própria.
 
 ## Como rodar no seu computador
 
@@ -52,27 +57,53 @@ python manage.py runserver
 
 Abra http://localhost:8000 e entre com o usuário criado no passo 4.
 
-## ERP antigo: clientes e consulta
+Para o sistema ficar com os dados da JT, siga os três passos da próxima seção.
 
-Decisão de 14/11/2026: **só os clientes vêm do ERP antigo**. Produtos, fornecedores, contratos, notas e estoque começam do zero no sistema novo. O banco antigo fica disponível apenas para consulta.
+## Carregar os dados da JT
 
-O ERP antigo continua emitindo as notas fiscais. Para atualizar a cópia de consulta e os clientes a partir do arquivo `.backup`:
+São três comandos, nesta ordem. Todos podem ser rodados de novo sem duplicar nada.
+
+**1. Tudo o que existe no ERP antigo** (decisão de 15/11/2026: importar tudo o que der, não só clientes).
+
+Restaure o `.backup` num banco `legado` (o script abaixo faz isso pelo Docker; no Windows sem Docker, use o `pg_restore` do PostgreSQL instalado) e rode:
 
 ```bash
-scripts/restaurar_backup.sh caminho/para/VivaClean_12h.backup
+python manage.py importar_legado              # todo o histórico (desde 2021)
+python manage.py importar_legado --desde 2026-01-01   # só a partir de uma data
+python manage.py importar_legado --simular    # mostra o resultado sem gravar
 ```
 
-O script recria o banco `legado` (cópia só para consulta), restaura o backup e roda `python manage.py importar_legado`. Pode rodar quantas vezes quiser: clientes já importados são atualizados, não duplicados, e um cliente que já existe com o mesmo CNPJ é reaproveitado. Para ver o resultado sem gravar nada, use `python manage.py importar_legado --simular`.
+Traz clientes, fornecedores, transportadoras, produtos (só os que aparecem em notas) e todas as notas de saída, entrada e CT-e, com itens e impostos. Com o backup de 12/11/2026: 3.902 notas de saída, 5.301 de entrada, 2.341 CT-e e 1.403 produtos, em cerca de 1 minuto.
 
-Para consultar o banco antigo, conecte no banco `legado` com qualquer cliente PostgreSQL (DBeaver, pgAdmin ou `psql`). O que se sabe dele:
+**2. Saldos por tanque e contratos, da planilha DRE do mês.** O ERP antigo não sabe em que tanque está cada produto nem controla contratos; isso vem da planilha que a JT já fecha:
+
+```bash
+python manage.py carregar_planilha "caminho/DRE 10.2026.xlsx"
+```
+
+- Aba **Estoque**, bloco FINAL: vira o saldo inicial de cada local no último dia do mês, com o custo da planilha. Os locais (Vale Logística, Bulokebios, Aroma, Biobrotas, JT, C Junior, Em trânsito) são criados e ligados ao parceiro dono.
+- Aba **Saldo Ctt Glicerina**: vira os contratos de compra e de venda. O que já tinha sido entregue fica em "entregue antes da implantação", para o saldo bater com a planilha.
+- A capacidade dos tanques não está na planilha: o sistema estima (saldo + 50%) e marca como "estimada". Corrija em *Cadastros → Locais e tanques*.
+- No final aparecem avisos: nomes da planilha que não foram achados no cadastro (por exemplo "Multgel") ou que foram ligados por aproximação ("Steinpher" → STEINFER). Confira esses.
+
+**3. (Opcional) Pedidos e fretes de exemplo**, para ver as telas funcionando:
+
+```bash
+python manage.py carregar_exemplos           # cria 40 fretes e 5 pedidos inventados
+python manage.py carregar_exemplos --apagar  # remove só o que é exemplo
+```
+
+Enquanto houver exemplos, todas as telas mostram uma faixa amarela avisando. Os fretes são inventados; os pedidos usam contratos reais (Maian, Upper Dog, Aroma, Polynt, GMP), e um deles puxa de dois tanques.
+
+### O que se sabe do banco antigo
 
 - É um PostgreSQL 9.6 compartilhado por várias empresas do grupo; a JT Ecobio é a **empresa 1** (`LEGADO_EMPRESA=1`).
-- Clientes: `fa.crci01`. O CNPJ fica em duas colunas: `cr01cgc` (sem os dígitos) e `cr01dacc` (os dois dígitos).
-- Notas de saída: `fi.arqnot` e `fi.arqnoi` (itens); cancelamento e chave em `fi.arqnfe`.
-- Notas de entrada e CT-e: `fi.aent01` e `fi.aent02`; XMLs recebidos em `fi.danfe`.
-- Fornecedores: `es.esci03`; transportadoras: `fa.crci19`; produtos: `es.esci01`.
-
-Na importação de teste com o backup de 12/11/2026, os 551 clientes do ERP antigo viraram 539 no sistema novo: 12 códigos antigos repetiam o CNPJ de outro cliente e foram unificados.
+- Notas de saída: `fi.arqnot` (uma linha por CFOP/alíquota, às vezes duplicada) e `fi.arqnoi` (itens). Cancelamento e chave vêm de `fi.arqnfe`.
+- Situação da nota de saída (`lsflag`): `N` venda, `S` remessa, `D` devolução/retorno, `F` entrada emitida pela JT, `*` cancelada ou inutilizada.
+- **Cuidado:** nas notas `D`, o campo de cliente guarda o código do **fornecedor**. Exemplo: a NF 4023 tem o código 523, que é o cliente Neuripe, mas a nota é para a Peter Cremer (fornecedor 523). O importador procura primeiro entre os fornecedores nesses casos.
+- Notas de entrada e CT-e: `fi.aent01` e `fi.aent02`. A chave de acesso vem dos XMLs guardados em `fi.danfe`.
+- Cadastros: `fa.crci01` (clientes), `es.esci03` (fornecedores), `fa.crci19` (transportadoras), `es.esci01` (produtos). O CNPJ fica em duas colunas (número sem os dígitos + dígitos).
+- Há datas impossíveis (anos 1880, 2028, 9202); essas notas são ignoradas e aparecem como aviso no final da importação, assim como 14 notas de entrada sem fornecedor.
 
 ## Como o estoque funciona
 
@@ -111,5 +142,6 @@ Os testes usam SQLite e não precisam do banco antigo.
 
 ## Próximas fases
 
-1. Industrialização, fracionamento e serviços (envase, transbordo, armazenagem).
-2. Financeiro e DRE automática.
+1. Ligar as notas novas aos contratos automaticamente (pelo número do pedido do cliente que vem na nota) e dar baixa no tanque certo.
+2. Industrialização, fracionamento e serviços (envase, transbordo, armazenagem).
+3. Financeiro e DRE automática.

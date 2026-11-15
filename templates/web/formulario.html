@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block icone_titulo %}{% icone icone %}{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url voltar %}">Lista</a> {% icone "direita" %} <b>{{ verbo }}</b>{% endblock %}
+{% block conteudo %}
+<form method="post" class="cartao formulario">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="secao">{% for e in form.non_field_errors %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}</div>{% endif %}
+  {% for s in secoes %}
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">{{ s.leve }} <b>{{ s.forte }}</b></h3>
+    {% if s.sub %}<p class="suave pequeno" style="margin:2px 0 14px">{{ s.sub }}</p>{% endif %}
+    <div class="campos">{% for campo in s.campos %}{% include "web/_campo.html" %}{% endfor %}</div>
+  </div>
+  {% endfor %}
+  <div class="rodape">
+    <a class="botao claro" href="{% if obj and obj.get_absolute_url %}{{ obj.get_absolute_url }}{% else %}{% url voltar %}{% endif %}">Cancelar</a>
+    <button class="botao">{% if obj %}Salvar alterações{% else %}Cadastrar{% endif %}</button>
+  </div>
+</form>
+{% endblock %}
