@@ -63,13 +63,35 @@
 
 <div class="grade g-7-5 mb">
   <div class="cartao">
-    <div class="titulo"><div><h2>{% icone "grafico" %} Veja suas <b>vendas</b></h2><p>Faturamento das NF-e de venda nos últimos 12 meses (notas do ERP antigo, sem as canceladas).</p></div>
-      <span class="suave pequeno nowrap">12 meses: <b>R$ {{ total_12m|brl }}</b></span></div>
+    <div class="titulo"><div><h2>{% icone "grafico" %} Veja suas <b>vendas</b></h2><p>Faturamento das NF-e dos últimos 12 meses, sem as canceladas. Passe o mouse em um mês para ver o detalhe.</p></div>
+      <span class="suave pequeno nowrap">12 meses: <b>R$ {{ grafico.total|brl }}</b></span></div>
     <div class="corpo">
-      <div class="grafico">
-        {% for v in vendas_mes %}
-        <div class="coluna"><div class="barra" style="height:{{ v.altura }}%"><span class="dica">{{ v.rotulo }}: R$ {{ v.total|brl }}</span></div><span class="mes">{{ v.rotulo }}</span></div>
-        {% endfor %}
+      <div class="legenda-grafico">
+        <span><i class="cor-vendas"></i> Vendas de produto <b>R$ {{ grafico.total_vendas|abreviado }}</b></span>
+        <span><i class="cor-servicos"></i> Serviços de envase <b>R$ {{ grafico.total_servicos|abreviado }}</b></span>
+      </div>
+      <div class="grafico-vendas">
+        <div class="eixo">{% for e in grafico.escala %}<span style="bottom:{{ e.pos|stringformat:".2f" }}%">{{ e.valor|curto }}</span>{% endfor %}</div>
+        <div class="area">
+          {% for e in grafico.escala %}<div class="linha-grade" style="bottom:{{ e.pos|stringformat:".2f" }}%"></div>{% endfor %}
+          {% for c in grafico.colunas %}
+          <div class="coluna" tabindex="0">
+            <div class="pilha" style="height:{{ c.h_total|stringformat:".2f" }}%">
+              {% if c.total %}<span class="valor-topo">{{ c.total|curto }}</span>{% endif %}
+              {% if c.servicos %}<div class="parte servicos" style="flex-grow:{{ c.h_servicos|stringformat:".4f" }}"></div>{% endif %}
+              {% if c.vendas %}<div class="parte vendas" style="flex-grow:{{ c.h_vendas|stringformat:".4f" }}"></div>{% endif %}
+            </div>
+            <div class="dica-mes{% if forloop.counter > 8 %} esquerda{% endif %}">
+              <b>{{ c.rotulo }}</b>
+              <div><em><i class="cor-vendas"></i> Vendas</em> <span>R$ {{ c.vendas|brl }}</span></div>
+              <div><em><i class="cor-servicos"></i> Serviços (envase)</em> <span>R$ {{ c.servicos|brl }}</span></div>
+              <div class="total">Total <span>R$ {{ c.total|brl }}</span></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div></div>
+        <div class="meses">{% for c in grafico.colunas %}<span>{{ c.rotulo }}</span>{% endfor %}</div>
       </div>
     </div>
   </div>
@@ -84,6 +106,24 @@
       {% empty %}<p class="suave">Sem notas de venda neste ano.</p>{% endfor %}
     </div>
   </div>
+</div>
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "entrada" %} Melhores <b>fornecedores</b></h2><p>Contratos de compra dos últimos 12 meses. O custo efetivo é produto + frete; a margem compara esse custo, sem impostos, com o preço médio net de venda do mesmo produto nos contratos de venda.</p></div>
+    <a class="botao claro pequeno" href="{% url 'web:contratos' %}?tipo=C">Contratos de compra</a></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>#</th><th>Fornecedor</th><th class="num">Comprado (t)</th><th class="num">Produto R$/kg</th><th class="num">Frete R$/kg</th><th class="num">Custo efetivo</th><th class="num">Venda média net</th><th>Margem net por kg</th></tr></thead>
+    <tbody>{% for f in fornecedores %}
+      <tr><td class="suave">{{ forloop.counter }}º</td>
+        <td><a class="forte" href="{% url 'web:parceiro' f.parceiro.pk %}">{{ f.parceiro.nome_fantasia|default:f.parceiro.razao_social|truncatechars:38 }}</a><span class="sub">{{ f.produto.nome|truncatechars:34 }} · {{ f.contratos }} contrato{{ f.contratos|pluralize }}</span></td>
+        <td class="num">{{ f.kg|toneladas }}</td>
+        <td class="num">{{ f.custo|num:4 }}</td>
+        <td class="num">{% if f.frete %}{{ f.frete|num:4 }}{% else %}<span class="suave" title="Sem frete no contrato (frete por conta do fornecedor ou ainda não informado)">—</span>{% endif %}</td>
+        <td class="num"><b>{{ f.efetivo|num:4 }}</b><span class="sub">net {{ f.efetivo_net|num:4 }}</span></td>
+        <td class="num">{% if f.preco_venda_net is not None %}{{ f.preco_venda_net|num:4 }}{% else %}<span class="suave">sem venda</span>{% endif %}</td>
+        <td style="min-width:150px">{% if f.margem_net is not None %}<div class="margem-forn"><b class="{% if f.margem_net < 0 %}vermelho{% endif %}">R$ {{ f.margem_net|num:4 }}</b><div class="progresso"><span style="width:{{ f.pct }}%"></span></div></div>{% else %}<span class="suave pequeno">sem contrato de venda do produto</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="8" class="vazio">Nenhum contrato de compra nos últimos 12 meses.</td></tr>{% endfor %}</tbody>
+  </table></div>
 </div>
 
 <div class="grade g2">

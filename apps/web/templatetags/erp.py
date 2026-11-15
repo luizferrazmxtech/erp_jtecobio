@@ -172,3 +172,16 @@ def chave(dicionario, k):
         return dicionario.get(k)
     except AttributeError:
         return None
+
+
+@register.filter
+def curto(valor):
+    """Rótulo curto para gráfico: 12.345.678 → '12,3 mi'; 534.000 → '534 mil'; 0 → '0'."""
+    if valor in (None, ""):
+        return ""
+    v = Decimal(str(valor))
+    if abs(v) >= 1_000_000:
+        return f"{_fmt(v / 1_000_000, 0 if abs(v) >= 100_000_000 or v % 1_000_000 == 0 else 1)} mi"
+    if abs(v) >= 1_000:
+        return f"{_fmt(v / 1_000, 0)} mil"
+    return _fmt(v, 0)
