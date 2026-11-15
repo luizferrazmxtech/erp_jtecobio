@@ -18,7 +18,65 @@
   </div>
   <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?">{% icone "limpar" %} Limpar</a></div>
 </form>
-<div class="cartao mb">
+{% if grupos %}
+<div class="resumo-estoque mb">
+  <div><span>Saldo total</span><b>{{ total_kg|kg }} kg</b></div>
+  <div><span>Valor em estoque</span><b>R$ {{ total_valor|brl }}</b><span class="pequeno suave">não inclui produto de clientes</span></div>
+  <div><span>Tanques com saldo</span><b>{{ linhas|length }}</b></div>
+</div>
+{% endif %}
+{% for g in grupos %}
+<section class="cartao mb grupo-tanques">
+  <div class="titulo"><div><h2>{% icone "tanque" %} {{ g.produto.nome }}</h2>
+    <p>{{ g.tanques|length }} local{{ g.tanques|length|pluralize:"is" }} · {{ g.kg|kg }} kg · R$ {{ g.valor|brl }}</p></div></div>
+  <div class="corpo"><div class="origens tanques-estoque">
+  {% for t in g.tanques %}{% with l=t.linha %}
+    <div class="origem tanque-estoque" tabindex="0" aria-describedby="resumo-{{ g.produto.pk }}-{{ l.local.pk }}">
+      <div class="cab-origem">
+        <div><b>{{ l.local.nome }}</b><span class="sub">{{ l.local.get_tipo_display }}{% if l.local.cidade %} · {{ l.local.cidade|title }}/{{ l.local.uf }}{% endif %}</span></div>
+        {% if l.local.eh_de_terceiros %}<span class="etiqueta amarelo sem-ponto">de cliente</span>{% endif %}
+      </div>
+      <div class="miolo-origem">
+        <a class="cilindro-grande {{ t.classe }}" href="{% url 'web:movimentacoes' %}?produto={{ l.produto.pk }}&local={{ l.local.pk }}" title="Ver movimentações">
+          <span class="nivel-livre" style="height:{{ t.altura_livre|stringformat:'.1f' }}%"></span>
+          <span class="nivel-reservado" style="bottom:{{ t.altura_livre|stringformat:'.1f' }}%;height:{{ t.altura_reservado|stringformat:'.1f' }}%"></span>
+          <span class="rotulo-sai">{{ t.pct }}%</span>
+        </a>
+        <table class="custos">
+          <tbody>
+            <tr><th>Saldo</th><td colspan="2"><b>{{ l.quantidade_kg|kg }} kg</b></td></tr>
+            <tr><th>Capacidade</th><td colspan="2">{% if t.capacidade %}{{ t.capacidade|kg }} kg{% if t.estimada %} <span class="etiqueta amarelo sem-ponto">estimada</span>{% endif %}{% else %}—{% endif %}</td></tr>
+            <tr><th>Custo médio</th><td>{{ l.custo_medio|num:4 }}</td><td>{{ t.custo_net|num:4 }} <span class="micro">net</span></td></tr>
+            <tr class="efetivo"><th>Valor</th><td colspan="2">R$ {{ l.valor|brl }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="resumo-tanque" id="resumo-{{ g.produto.pk }}-{{ l.local.pk }}" role="tooltip">
+        <div class="linhas-resumo">
+          <div><span>Livre para vender</span><b>{{ t.livre|kg }} kg</b></div>
+          <div><span>Reservado em pedidos</span><b>{{ t.reservado|kg }} kg</b></div>
+          <div><span>Ocupação</span><b>{% if t.capacidade %}{{ t.pct }}% de {{ t.capacidade|kg }} kg{% else %}sem capacidade cadastrada{% endif %}</b></div>
+          <div><span>Custo médio net</span><b>R$ {{ t.custo_net|num:4 }}/kg</b></div>
+          <div><span>Valor net</span><b>R$ {{ t.valor_net|brl }}</b></div>
+          <div><span>Última movimentação</span><b>{% if t.ultima %}{{ t.ultima.data|date:"d/m/Y" }}{% else %}—{% endif %}</b></div>
+        </div>
+        <h4>Últimas saídas</h4>
+        {% for m, quem in t.quem %}<div class="mov"><span>{{ m.data|date:"d/m" }}</span><span class="quem">{{ quem|truncatechars:28 }}</span><b class="negativo">{{ m.quantidade_kg|kg }}</b></div>
+        {% empty %}<p class="suave">Nenhuma saída.</p>{% endfor %}
+        <h4>Últimas entradas</h4>
+        {% for m in t.entradas %}<div class="mov"><span>{{ m.data|date:"d/m" }}</span><span class="quem">{% if m.nota_id and m.nota.parceiro_id %}{{ m.nota.parceiro.razao_social|truncatechars:20 }}{% else %}{{ m.documento|default:m.get_tipo_display|truncatechars:20 }}{% endif %} · R$ {{ m.custo_unitario|num:4 }}</span><b class="positivo">{{ m.quantidade_kg|kg }}</b></div>
+        {% empty %}<p class="suave">Nenhuma entrada.</p>{% endfor %}
+      </div>
+    </div>
+  {% endwith %}{% endfor %}
+  </div></div>
+</section>
+{% empty %}
+<div class="cartao mb"><p class="vazio">Nenhum saldo. Carregue a planilha (<code>python manage.py carregar_planilha</code>) ou lance uma entrada.</p></div>
+{% endfor %}
+<p class="pequeno suave mb">Passe o mouse (ou toque) num tanque para ver o resumo. A parte listrada em vermelho é o que já está reservado em pedidos confirmados. O custo net é sem ICMS e PIS/COFINS (créditos da compra).</p>
+
+<details class="cartao mb ver-tabela"><summary>{% icone "buscar" %} Ver em tabela</summary>
   <div class="tabela-caixa"><table class="tabela">
     <thead><tr><th>Produto</th><th>Local</th><th class="num">Saldo (kg)</th><th class="num">Custo médio (R$/kg)</th><th class="num">Valor (R$)</th><th class="acoes">Ações</th></tr></thead>
     <tbody>{% for l in linhas %}
@@ -28,7 +86,7 @@
     {% empty %}<tr><td colspan="6" class="vazio">Nenhum saldo. Carregue a planilha (<code>python manage.py carregar_planilha</code>) ou lance uma entrada.</td></tr>{% endfor %}</tbody>
     {% if linhas %}<tfoot><tr><td colspan="2">Total (o valor não inclui produto de clientes)</td><td class="num">{{ total_kg|kg }}</td><td></td><td class="num">{{ total_valor|brl }}</td><td></td></tr></tfoot>{% endif %}
   </table></div>
-</div>
+</details>
 <div class="cartao">
   <div class="titulo"><div><h2>{% icone "transferir" %} Últimas <b>movimentações</b></h2></div><a class="botao claro pequeno" href="{% url 'web:movimentacoes' %}">Ver todas</a></div>
   <div class="tabela-caixa"><table class="tabela">
