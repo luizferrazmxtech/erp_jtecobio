@@ -1,0 +1,116 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Painel{% endblock %}
+{% block icone_titulo %}{% endblock %}
+{% block titulo_pagina %}{{ saudacao }}, {{ user.first_name|default:user.get_username|upper }}{% endblock %}
+{% block conteudo %}
+<div class="indicadores">
+  <div class="cartao indicador">
+    <span class="icone">{% icone "tanque" %}</span>
+    <div><div class="rotulo">Em estoque</div><div class="valor">{{ estoque_kg|toneladas }} <small>t</small></div>
+      <div class="detalhe">R$ {{ estoque_valor|abreviado }} a custo médio</div></div>
+  </div>
+  <div class="cartao indicador">
+    <span class="icone amarelo">{% icone "vendas" %}</span>
+    <div><div class="rotulo">Reservado</div><div class="valor">{{ reservado_kg|toneladas }} <small>t</small></div>
+      <div class="detalhe">{{ pedidos_abertos }} pedido{{ pedidos_abertos|pluralize }} em aberto</div></div>
+  </div>
+  <div class="cartao indicador">
+    <span class="icone azul">{% icone "saida" %}</span>
+    <div><div class="rotulo">A entregar</div><div class="valor">{{ venda_total.kg|toneladas }} <small>t</small></div>
+      <div class="detalhe">{{ venda_qtd }} contratos · R$ {{ venda_total.valor|abreviado }}</div></div>
+  </div>
+  <div class="cartao indicador">
+    <span class="icone escuro">{% icone "entrada" %}</span>
+    <div><div class="rotulo">A receber de usinas</div><div class="valor">{{ compra_total.kg|toneladas }} <small>t</small></div>
+      <div class="detalhe">{{ compra_qtd }} contratos de compra abertos</div></div>
+  </div>
+  <div class="cartao indicador">
+    <span class="icone">{% icone "fiscal" %}</span>
+    <div><div class="rotulo">Faturado em {{ hoje|date:"F"|lower }}</div><div class="valor"><small>R$</small> {{ faturado_mes|abreviado }}</div>
+      <div class="detalhe">{{ notas_mes }} NF-e de venda até hoje</div></div>
+  </div>
+</div>
+
+<div class="cartao mb">
+  <div class="titulo">
+    <div><h2>{% icone "tanque" %} Saldo dos <b>tanques</b></h2><p>Quanto há em cada distribuidora, industrializador e armazém. A faixa vermelha é o que já está reservado em pedidos.</p></div>
+    <a class="botao claro pequeno" href="{% url 'estoque:saldos' %}">Ver estoque</a>
+  </div>
+  <div class="corpo">
+    <div class="tanques">
+      {% for t in tanques %}
+      <a class="cartao tanque" href="{% url 'web:movimentacoes' %}?local={{ t.local.pk }}&produto={{ t.produto.pk }}" style="color:inherit;text-decoration:none">
+        <div class="cilindro" title="{{ t.pct }}% da capacidade">
+          <div class="nivel {{ t.classe }}" style="height:{{ t.pct }}%"></div>
+          {% if t.pct_reservado %}<div class="reservado" style="bottom:{{ t.pct_livre }}%;height:{{ t.pct_reservado }}%"></div>{% endif %}
+          <span class="pct">{{ t.pct }}%</span>
+        </div>
+        <div>
+          <b>{{ t.local.nome }}</b>
+          <div class="prod">{{ t.produto.nome|truncatechars:34 }}</div>
+          <div class="qtd">{{ t.saldo|kg }} kg</div>
+          {% if t.capacidade %}<div class="linha-info">de {{ t.capacidade|kg }} kg{% if t.estimada %} (estimada){% endif %}</div>{% endif %}
+          <div class="linha-info">custo R$ {{ t.custo|num:4 }}/kg</div>
+          {% if t.reservado %}<div class="linha-info reserva">{{ t.reservado|kg }} kg reservados</div>{% endif %}
+        </div>
+      </a>
+      {% empty %}
+      <p class="suave">Nenhum saldo ainda. Carregue a planilha com <code>python manage.py carregar_planilha</code> ou lance uma entrada.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="grade g-7-5 mb">
+  <div class="cartao">
+    <div class="titulo"><div><h2>{% icone "grafico" %} Veja suas <b>vendas</b></h2><p>Faturamento das NF-e de venda nos últimos 12 meses (notas do ERP antigo, sem as canceladas).</p></div>
+      <span class="suave pequeno nowrap">12 meses: <b>R$ {{ total_12m|brl }}</b></span></div>
+    <div class="corpo">
+      <div class="grafico">
+        {% for v in vendas_mes %}
+        <div class="coluna"><div class="barra" style="height:{{ v.altura }}%"><span class="dica">{{ v.rotulo }}: R$ {{ v.total|brl }}</span></div><span class="mes">{{ v.rotulo }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="cartao">
+    <div class="titulo"><div><h2>{% icone "cadastros" %} Maiores <b>clientes</b> em {{ hoje|date:"Y" }}</h2><p>Por valor faturado em notas de venda.</p></div></div>
+    <div class="corpo">
+      {% for c in maiores_clientes %}
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;gap:10px"><a href="{% url 'web:parceiro' c.parceiro %}" style="color:inherit">{{ c.parceiro__nome_fantasia|default:c.parceiro__razao_social|truncatechars:34 }}</a><b class="num">R$ {{ c.total|brl }}</b></div>
+        <div class="progresso" style="margin-top:5px"><span style="width:{{ c.pct }}%"></span></div>
+      </div>
+      {% empty %}<p class="suave">Sem notas de venda neste ano.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="grade g2">
+  <div class="cartao">
+    <div class="titulo"><div><h2>{% icone "contratos" %} Contratos de venda <b>a entregar</b></h2><p>Os mais antigos primeiro.</p></div>
+      <a class="botao claro pequeno" href="{% url 'web:contratos' %}?tipo=V&situacao=ABERTO&com_saldo=1">Ver todos</a></div>
+    <div class="tabela-caixa"><table class="tabela">
+      <thead><tr><th>Contrato</th><th>Cliente</th><th class="num">Saldo (kg)</th><th>Entregue</th></tr></thead>
+      <tbody>{% for c in contratos_venda %}
+        <tr><td><a class="forte" href="{% url 'web:contrato' c.pk %}">{{ c.numero }}</a><span class="sub">{{ c.mes_referencia|date:"m/Y" }}</span></td>
+          <td>{{ c.parceiro|truncatechars:28 }}<span class="sub">{{ c.produto.nome|truncatechars:30 }}</span></td>
+          <td class="num">{{ c.saldo|kg }}</td>
+          <td style="min-width:110px"><div class="progresso azul"><span style="width:{{ c.quantidade_entregue|porcento:c.quantidade_kg }}%"></span></div><span class="pequeno suave">{{ c.quantidade_entregue|porcento:c.quantidade_kg }}%</span></td></tr>
+      {% empty %}<tr><td colspan="4" class="vazio">Nenhum contrato de venda com saldo.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  <div class="cartao">
+    <div class="titulo"><div><h2>{% icone "vendas" %} Últimos <b>pedidos</b></h2><p>Pedidos de venda criados no sistema novo.</p></div>
+      <a class="botao pequeno" href="{% url 'vendas:novo' %}">{% icone "mais" %} Novo pedido</a></div>
+    <div class="tabela-caixa"><table class="tabela">
+      <thead><tr><th>Nº</th><th>Cliente</th><th class="num">kg</th><th>Situação</th></tr></thead>
+      <tbody>{% for p in ultimos_pedidos %}
+        <tr><td><a class="forte" href="{% url 'vendas:detalhe' p.pk %}">{{ p.numero }}</a><span class="sub">{{ p.data|date:"d/m/Y" }}</span></td>
+          <td>{{ p.cliente|truncatechars:28 }}<span class="sub">{{ p.destino_cidade|title }}/{{ p.destino_uf }}</span></td>
+          <td class="num">{{ p.quantidade_kg|kg }}</td><td>{% situacao p.status %}</td></tr>
+      {% empty %}<tr><td colspan="4" class="vazio">Nenhum pedido ainda.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+</div>
+{% endblock %}

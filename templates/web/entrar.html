@@ -1,0 +1,31 @@
+{% load static erp %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar · JT Ecobio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+<div class="tela-login">
+  <div class="arte">
+    <span class="marca"><span class="gota">{% icone "gota" %}</span><span>jt<b>ecobio</b></span></span>
+    <div>
+      <h2>Glicerina no <b>tanque certo</b>, contrato com saldo e frete que fecha a conta.</h2>
+      <p>Estoque por tanque e distribuidora, contratos de compra e venda e pedidos que puxam de vários tanques.</p>
+    </div>
+    <p class="pequeno">JT Ecobio Comércio e Exportação de Óleos e Derivados · Ibaté/SP</p>
+  </div>
+  <div class="caixa">
+    <form method="post">{% csrf_token %}
+      <div><h1>Entrar</h1><p class="suave">Use o seu usuário do ERP.</p></div>
+      {% if form.errors %}<div class="aviso erro">{% icone "alerta" %}<div>Usuário ou senha não conferem.</div></div>{% endif %}
+      <div class="campo"><label for="id_username">Usuário</label>{{ form.username }}</div>
+      <div class="campo"><label for="id_password">Senha</label>{{ form.password }}</div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="botao verde">Entrar {% icone "direita" %}</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

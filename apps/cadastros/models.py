@@ -34,6 +34,9 @@ class Produto(models.Model):
     ncm = models.CharField("NCM", max_length=10, blank=True)
     controla_estoque = models.BooleanField(default=True)
     ativo = models.BooleanField(default=True)
+    codigo_legado = models.CharField(
+        "código no ERP antigo", max_length=30, blank=True, db_index=True,
+    )
 
     class Meta:
         ordering = ["nome"]
@@ -67,9 +70,16 @@ class Parceiro(models.Model):
     eh_industrializador = models.BooleanField("industrializador", default=False)
     eh_armazem = models.BooleanField("armazém / distribuidora", default=False)
 
-    # Código do cliente no ERP antigo (só os clientes são importados de lá).
+    # Códigos do ERP antigo: lá clientes, fornecedores e transportadoras
+    # ficam em tabelas separadas, cada uma com sua numeração.
     codigo_legado_cliente = models.IntegerField(
         "código do cliente no ERP antigo", null=True, blank=True, db_index=True,
+    )
+    codigo_legado_fornecedor = models.IntegerField(
+        "código do fornecedor no ERP antigo", null=True, blank=True, db_index=True,
+    )
+    codigo_legado_transportadora = models.IntegerField(
+        "código da transportadora no ERP antigo", null=True, blank=True, db_index=True,
     )
 
     ativo = models.BooleanField(default=True)

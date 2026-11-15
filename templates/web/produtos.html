@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Produtos{% endblock %}
+{% block icone_titulo %}{% icone "produto" %}{% endblock %}
+{% block titulo_pagina %}Produtos{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'web:produtos' %}">Produtos</a> {% icone "direita" %} <b>Listar</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes"><a class="botao" href="{% url 'web:adicionar' 'produto' %}">{% icone "mais" %} Adicionar</a></div>
+<form class="cartao filtros" method="get">
+  <div class="campos">
+    <div class="campo largo"><label>Nome ou código</label><input name="busca" value="{{ request.GET.busca }}"></div>
+    <div class="campo"><label>Tipo</label><select name="tipo"><option value="">Todos</option>{% for v, r in tipos %}<option value="{{ v }}" {% if request.GET.tipo == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>Controle de estoque</label><select name="estoque"><option value="">Todos</option><option value="sim" {% if request.GET.estoque == "sim" %}selected{% endif %}>Só os que controlam</option></select></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?">{% icone "limpar" %} Limpar</a></div>
+</form>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Código</th><th>Nome</th><th>Tipo</th><th>Un.</th><th class="num">Densidade</th><th class="num">Itens em notas</th><th>Estoque</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for p in pagina %}<tr>
+      <td class="nowrap">{{ p.codigo }}</td><td>{{ p.nome }}</td><td class="pequeno">{{ p.get_tipo_display }}</td><td>{{ p.unidade }}</td>
+      <td class="num">{{ p.densidade|default_if_none:"—" }}</td><td class="num">{{ p.n_itens }}</td>
+      <td>{% if p.controla_estoque %}<span class="etiqueta verde">Controla</span>{% else %}<span class="etiqueta cinza">Não</span>{% endif %}</td>
+      <td class="acoes"><a class="acao" title="Editar" href="{% url 'web:editar' 'produto' p.pk %}">{% icone "editar" %}</a></td></tr>
+    {% empty %}<tr><td colspan="8" class="vazio">Nenhum produto.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% include "web/_paginacao.html" %}
+</div>
+{% endblock %}

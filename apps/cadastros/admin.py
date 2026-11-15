@@ -7,7 +7,7 @@ from .models import Local, Parceiro, Produto, Tanque
 class ProdutoAdmin(admin.ModelAdmin):
     list_display = ["codigo", "nome", "tipo", "unidade", "densidade", "controla_estoque", "ativo"]
     list_filter = ["tipo", "controla_estoque", "ativo"]
-    search_fields = ["codigo", "nome"]
+    search_fields = ["codigo", "nome", "codigo_legado"]
 
 
 @admin.register(Parceiro)
@@ -18,7 +18,8 @@ class ParceiroAdmin(admin.ModelAdmin):
     fieldsets = [
         (None, {"fields": ["razao_social", "nome_fantasia", "documento", "inscricao_estadual", "cidade", "uf", "ativo"]}),
         ("Papéis", {"fields": ["eh_cliente", "eh_fornecedor", "eh_transportadora", "eh_industrializador", "eh_armazem"]}),
-        ("ERP antigo", {"classes": ["collapse"], "fields": ["codigo_legado_cliente"]}),
+        ("ERP antigo", {"classes": ["collapse"], "fields": [
+            "codigo_legado_cliente", "codigo_legado_fornecedor", "codigo_legado_transportadora"]}),
     ]
 
 

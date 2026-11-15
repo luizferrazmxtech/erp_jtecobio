@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Tabela de frete{% endblock %}
+{% block icone_titulo %}{% icone "frete" %}{% endblock %}
+{% block titulo_pagina %}Tabela de frete{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'vendas:lista' %}">Vendas</a> {% icone "direita" %} <b>Tabela de frete</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes"><a class="botao" href="{% url 'web:adicionar' 'frete' %}">{% icone "mais" %} Adicionar</a></div>
+<form class="cartao filtros" method="get">
+  <div class="campos">
+    <div class="campo largo"><label>Origem</label><select name="origem"><option value="">Todas</option>{% for l in locais %}<option value="{{ l.pk }}" {% if request.GET.origem == l.pk|stringformat:"s" %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+    <div class="campo"><label>UF de destino</label><select name="uf"><option value="">Todas</option>{% for uf in ufs %}<option {% if request.GET.uf == uf %}selected{% endif %}>{{ uf }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?">{% icone "limpar" %} Limpar</a></div>
+</form>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Origem</th><th>Destino</th><th class="num">Frete (R$/kg)</th><th class="num">Caminhão de 30 t</th><th>Transportadora</th><th>Atualizado</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for f in fretes %}<tr>
+      <td>{{ f.origem }}</td><td>{% if f.destino_cidade %}{{ f.destino_cidade|title }}/{% endif %}{{ f.destino_uf }}</td>
+      <td class="num"><b>{{ f.preco_kg|num:4 }}</b></td><td class="num">R$ {% widthratio f.preco_kg 1 30000 %}</td>
+      <td>{{ f.transportadora|default:"—"|truncatechars:34 }}</td><td>{{ f.atualizado_em|date:"d/m/Y" }}</td>
+      <td class="acoes"><a class="acao" title="Editar" href="{% url 'web:editar' 'frete' f.pk %}">{% icone "editar" %}</a></td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Nenhum frete cadastrado. Sem frete, o pedido ainda funciona, mas não sabe qual tanque sai mais barato.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

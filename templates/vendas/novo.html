@@ -1,11 +1,32 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load erp %}
 {% block titulo %}Novo pedido{% endblock %}
+{% block icone_titulo %}{% icone "vendas" %}{% endblock %}
+{% block titulo_pagina %}Adicionar pedido de venda{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'vendas:lista' %}">Vendas</a> {% icone "direita" %} <b>Adicionar</b>{% endblock %}
 {% block conteudo %}
-<h1>Novo pedido de venda</h1>
-<p class="suave">Ao salvar, o sistema já sugere de quais tanques tirar o produto pelo menor custo de produto + frete. Você revisa antes de confirmar.</p>
-{% if form.non_field_errors %}<div class="msg error">{% for e in form.non_field_errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
-<form method="post">{% csrf_token %}
-  {{ form.as_p }}
-  <button>Criar pedido</button> <a href="{% url 'vendas:lista' %}">Cancelar</a>
+<form method="post" class="cartao formulario">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="secao">{% for e in form.non_field_errors %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}</div>{% endif %}
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Preencha os <b>dados do pedido</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">Ao salvar, o sistema sugere de quais tanques tirar pelo menor custo de produto + frete. Você revisa antes de confirmar.</p>
+    <div class="campos">
+      {% with campo=form.cliente %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.contrato %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.produto %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.data %}{% include "web/_campo.html" %}{% endwith %}
+    </div>
+  </div>
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Informe <b>quantidade, preço e entrega</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">Cidade e UF em branco usam o endereço do cadastro do cliente.</p>
+    <div class="campos">
+      {% with campo=form.quantidade_kg %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.preco_unitario %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.destino_cidade %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.destino_uf %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.observacao %}{% include "web/_campo.html" %}{% endwith %}
+    </div>
+  </div>
+  <div class="rodape"><a class="botao claro" href="{% url 'vendas:lista' %}">Cancelar</a><button class="botao">Criar pedido e sugerir tanques</button></div>
 </form>
 {% endblock %}

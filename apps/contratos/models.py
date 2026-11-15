@@ -1,7 +1,8 @@
 """
 Contratos de compra (com usinas) e de venda (com clientes).
 
-O saldo nunca é digitado: é a quantidade contratada menos a soma dos
+O saldo nunca é digitado: é a quantidade contratada menos o que já tinha
+sido entregue antes da implantação (`entregue_antes`) menos a soma dos
 itens de nota fiscal vinculados ao contrato (notas canceladas não contam).
 """
 
@@ -22,7 +23,7 @@ class ContratoQuerySet(models.QuerySet):
             Decimal("0"),
             output_field=models.DecimalField(max_digits=14, decimal_places=4),
         )
-        return self.annotate(quantidade_entregue=entregue).annotate(
+        return self.annotate(quantidade_entregue=entregue + models.F("entregue_antes")).annotate(
             saldo=models.F("quantidade_kg") - models.F("quantidade_entregue")
         )
 
@@ -52,6 +53,10 @@ class Contrato(models.Model):
     frete_previsto = models.DecimalField(
         "frete previsto (R$/kg)", max_digits=10, decimal_places=4, default=0,
     )
+    entregue_antes = models.DecimalField(
+        "entregue antes da implantação (kg)", max_digits=14, decimal_places=3, default=0,
+        help_text="Quanto já tinha sido entregue quando o contrato foi carregado no sistema (ex.: pela planilha).",
+    )
     mes_referencia = models.DateField("mês de entrega", help_text="Use o dia 1 do mês.")
     status = models.CharField(max_length=6, choices=Status.choices, default=Status.ABERTO)
     observacao = models.TextField("observação", blank=True)
@@ -76,4 +81,10 @@ class Contrato(models.Model):
         entregue = self.itens_nota.filter(nota__cancelada=False).aggregate(
             total=Sum("quantidade")
         )["total"] or Decimal("0")
-        return self.quantidade_kg - entregue
+        return self.quantidade_kg - self.entregue_antes - entregue
+
+    @property
+    def percentual_entregue(self) -> int:
+        if not self.quantidade_kg:
+            return 0
+        return max(0, min(100, round(100 * (self.quantidade_kg - self.calcular_saldo()) / self.quantidade_kg)))
