@@ -8,8 +8,6 @@
   var form = document.getElementById("form-os");
   if (!form) return;
   var corpo = document.querySelector("#recipientes tbody");
-  var densidades = {};
-  try { densidades = JSON.parse(document.getElementById("densidades").textContent); } catch (e) {}
 
   function numero(texto) {
     var t = String(texto || "").trim().replace(/\s/g, "");
@@ -114,7 +112,8 @@
     renumerar(); calcular();
   });
   campo("produto").addEventListener("change", function () {
-    var d = densidades[this.value];
+    var op = this.options[this.selectedIndex];
+    var d = op && op.dataset.densidade;
     if (d) campo("densidade").value = String(d).replace(".", ",");
     calcular();
   });

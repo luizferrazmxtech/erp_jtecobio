@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.cadastros.models import Parceiro, Produto
@@ -32,8 +33,15 @@ class OrdemServicoForm(forms.ModelForm):
         self.fields["cliente"].queryset = Parceiro.objects.filter(ativo=True)
         self.fields["cliente"].widget = BuscaSelect(papel="cliente", placeholder="Digite o nome, CNPJ ou cidade do cliente…")
         self.fields["cliente"].widget.choices = self.fields["cliente"].choices
-        self.fields["produto"].queryset = Produto.objects.filter(ativo=True).order_by("nome")
-        self.fields["produto"].empty_label = "Produto do cliente (não cadastrado)"
+        # Busca digitável: os produtos que o cliente já envasou aparecem primeiro.
+        self.fields["produto"].queryset = Produto.objects.filter(
+            Q(ativo=True) | Q(pk=self.instance.produto_id or 0)).order_by("nome")
+        self.fields["produto"].widget = BuscaSelect(
+            url_nome="web:busca_produtos", depende="cliente",
+            placeholder="Clique para ver os produtos deste cliente ou digite o nome…",
+            vazio="Este cliente ainda não tem produto em OS anteriores. Digite o nome para buscar, ou deixe em branco e preencha a descrição.")
+        self.fields["produto"].widget.choices = self.fields["produto"].choices
+        self.fields["produto"].help_text = "Opcional. Se o produto do cliente não estiver cadastrado, deixe em branco e preencha a descrição."
         if self.instance.pk:
             self.fields["quantidade"].initial = self.instance.quantidade_kg
 
