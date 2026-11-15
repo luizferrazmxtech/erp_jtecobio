@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import busca, views
 
 app_name = "web"
 
@@ -19,5 +19,6 @@ urlpatterns = [
     path("cadastros/locais/", views.locais, name="locais"),
     path("novo/<str:nome>/", views.adicionar, name="adicionar"),
     path("editar/<str:nome>/<int:pk>/", views.editar, name="editar"),
+    path("busca/parceiros/", busca.parceiros, name="busca_parceiros"),
     path("sistema/conferir-planilha/", views.conferir_planilha, name="conferir_planilha"),
 ]

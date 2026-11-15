@@ -65,11 +65,24 @@ def novo(request):
         pedido.usuario = request.user
         pedido.save()
         services.aplicar_sugestao(pedido)
-        messages.success(request, f"Pedido {pedido.numero} criado com as origens sugeridas. Revise e confirme.")
+        texto = f"Pedido {pedido.numero} criado com as origens sugeridas."
+        d = form.cleaned_data
+        if d.get("outro_produto"):
+            # O outro produto vira um pedido irmão: mesma venda, tanques e margem próprios.
+            outro = Pedido.objects.create(
+                data=pedido.data, cliente=pedido.cliente, produto=d["produto2"], quantidade_kg=d["quantidade2"],
+                preco_unitario=d["preco2"], destino_cidade=pedido.destino_cidade, destino_uf=pedido.destino_uf,
+                exportacao=pedido.exportacao, icms_venda=pedido.icms_venda,
+                observacao=pedido.observacao, pedido_principal=pedido, usuario=request.user,
+            )
+            services.aplicar_sugestao(outro)
+            texto += f" O outro produto ({outro.produto}) ficou no pedido {outro.numero}, na mesma venda."
+        messages.success(request, texto + " Revise e confirme.")
         return redirect("vendas:detalhe", pk=pedido.pk)
     # Todos os contratos de venda abertos, para a tela mostrar só os do cliente escolhido.
     contratos = [
-        {"id": c.pk, "cliente": c.parceiro_id, "produto": c.produto_id, "preco": str(c.preco_unitario or ""),
+        {"id": c.pk, "cliente": c.parceiro_id, "produto": c.produto_id, "produto_nome": str(c.produto),
+         "preco": str(c.preco_unitario or ""),
          "texto": form.fields["contrato"].label_from_instance(c)}
         for c in Contrato.objects.filter(tipo=Contrato.Tipo.VENDA, status=Contrato.Status.ABERTO)
         .select_related("produto").order_by("-mes_referencia", "numero")

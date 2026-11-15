@@ -174,3 +174,40 @@ def test_saldos_por_tanque_mostra_tanques_com_resumo(logado, dados, glicerina, a
     assert "NF 4100" in html and "Livre para vender" in html
     assert "45%" in html  # 45.000 kg num tanque de 100.000 kg
     assert "Ver em tabela" in html
+
+
+def test_busca_de_clientes_digitando(logado, dados):
+    Parceiro.objects.create(razao_social="OUTRA EMPRESA", eh_fornecedor=True, cidade="IBATE", uf="SP")
+    r = logado.get("/busca/parceiros/?papel=cliente&q=maian").json()["resultados"]
+    assert [x["texto"] for x in r] == ["MAIAN INDUSTRIA"] and "Jandira/SP" in r[0]["detalhe"]
+    assert logado.get("/busca/parceiros/?papel=cliente&q=outra").json()["resultados"] == []  # é fornecedor
+    # a tela não manda a lista inteira de clientes, só a caixa de busca
+    html = logado.get("/vendas/novo/").content.decode()
+    assert "busca-texto" in html and "MAIAN INDUSTRIA</option>" not in html
+
+
+def test_pedido_com_outro_produto_na_mesma_venda(logado, dados, glicerina):
+    from apps.cadastros.models import Produto
+
+    outro = Produto.objects.create(nome="GLICERINA BIDESTILADA", tipo=glicerina.tipo, controla_estoque=True)
+    resp = logado.post("/vendas/novo/", {
+        "data": "2026-11-15", "cliente": dados["cliente"].pk, "contrato": dados["contrato"].pk,
+        "produto": glicerina.pk, "quantidade_kg": "10000", "preco_unitario": "7.63",
+        "destino_cidade": "", "destino_uf": "", "observacao": "",
+        "outro_produto": "on", "produto2": outro.pk, "quantidade2": "2000", "preco2": "9.40",
+    })
+    assert resp.status_code == 302
+    principal = Pedido.objects.get(produto=glicerina, cliente=dados["cliente"])
+    irmao = Pedido.objects.get(produto=outro)
+    assert irmao.pedido_principal == principal and irmao.contrato is None
+    assert irmao.quantidade_kg == Decimal("2000") and irmao.destino_uf == "SP"
+    assert principal.mesma_venda == [irmao] and irmao.mesma_venda == [principal]
+    assert f"Pedido {irmao.numero}" in logado.get(f"/vendas/{principal.pk}/").content.decode()
+
+
+def test_outro_produto_exige_dados(logado, dados, glicerina):
+    resp = logado.post("/vendas/novo/", {
+        "data": "2026-11-15", "cliente": dados["cliente"].pk, "produto": glicerina.pk, "quantidade_kg": "10000",
+        "preco_unitario": "7.63", "destino_uf": "SP", "outro_produto": "on",
+    })
+    assert resp.status_code == 200 and "Escolha o outro produto." in resp.content.decode()

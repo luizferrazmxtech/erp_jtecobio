@@ -5,16 +5,26 @@ from apps.cadastros.models import Parceiro, Produto
 from apps.contratos.models import Contrato
 from apps.fiscal.models import NotaFiscal
 
+from apps.web.busca import BuscaSelect
+
 from .models import Pedido
 
 
 class PedidoForm(forms.ModelForm):
+    # Outro produto na mesma venda (ex.: atender o contrato e levar mais algo junto).
+    outro_produto = forms.BooleanField(label="Incluir outro produto nesta venda", required=False)
+    produto2 = forms.ModelChoiceField(label="Outro produto", queryset=Produto.objects.none(), required=False)
+    quantidade2 = forms.DecimalField(label="Quantidade do outro produto (kg)", required=False, min_value=0,
+                                     max_digits=14, decimal_places=3)
+    preco2 = forms.DecimalField(label="Preço do outro produto (R$/kg)", required=False, min_value=0,
+                                max_digits=12, decimal_places=4)
+
     class Meta:
         model = Pedido
         fields = ["data", "cliente", "contrato", "produto", "quantidade_kg", "preco_unitario",
                   "destino_cidade", "destino_uf", "exportacao", "icms_venda", "observacao"]
         widgets = {
-            "data": forms.DateInput(attrs={"type": "date"}),
+            "data": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "observacao": forms.Textarea(attrs={"rows": 2}),
         }
         help_texts = {"destino_cidade": "Em branco: usa a cidade do cadastro do cliente."}
@@ -23,7 +33,10 @@ class PedidoForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["data"].initial = timezone.localdate()
         self.fields["cliente"].queryset = Parceiro.objects.filter(eh_cliente=True, ativo=True)
+        self.fields["cliente"].widget = BuscaSelect(papel="cliente", placeholder="Digite o nome, CNPJ ou cidade do cliente…")
+        self.fields["cliente"].widget.choices = self.fields["cliente"].choices
         self.fields["produto"].queryset = Produto.objects.filter(ativo=True, controla_estoque=True)
+        self.fields["produto2"].queryset = self.fields["produto"].queryset
         # Só contratos de venda abertos do cliente escolhido (a tela filtra de novo ao trocar o cliente).
         contratos = Contrato.objects.filter(
             tipo=Contrato.Tipo.VENDA, status=Contrato.Status.ABERTO).select_related("parceiro", "produto")
@@ -56,6 +69,14 @@ class PedidoForm(forms.ModelForm):
             self.add_error("contrato", "Este contrato é de outro produto.")
         if dados.get("quantidade_kg") is not None and dados["quantidade_kg"] <= 0:
             self.add_error("quantidade_kg", "A quantidade deve ser maior que zero.")
+        if dados.get("outro_produto"):
+            for campo, msg in (("produto2", "Escolha o outro produto."),
+                               ("quantidade2", "Informe a quantidade do outro produto."),
+                               ("preco2", "Informe o preço do outro produto.")):
+                if not dados.get(campo):
+                    self.add_error(campo, msg)
+            if dados.get("produto2") and dados.get("produto2") == dados.get("produto"):
+                self.add_error("produto2", "Escolha um produto diferente do primeiro; para mais quantidade, aumente a do primeiro.")
         return dados
 
 
