@@ -443,3 +443,26 @@ table.tabela { width: 100%; border-collapse: collapse; background: #fff; }
   .origens { grid-template-columns: minmax(0, 1fr); }
   .rota { display: none; } /* no celular os cartões já mostram tudo */
 }
+
+/* Pedido: escolha dos tanques diferente do que está salvo */
+.aviso-nao-salvo { display: flex; gap: 10px; align-items: flex-start; margin: 0 18px 12px; padding: 10px 14px;
+  border: 1px solid #f0d49b; border-radius: 8px; background: var(--amarelo-claro); color: #6b4a12; font-size: 13px; }
+.aviso-nao-salvo[hidden] { display: none; }
+.aviso-nao-salvo .ic { flex: none; margin-top: 1px; color: var(--amarelo); }
+
+/* Pedido: ajuda "Como cada custo é calculado" */
+.explica-custos { margin: 0 18px 12px; border: 1px solid var(--borda); border-radius: 8px; background: #fafbfc; }
+.explica-custos summary { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; font-weight: 600; font-size: 13px; list-style: none; }
+.explica-custos summary::-webkit-details-marker { display: none; }
+.explica-custos[open] summary { border-bottom: 1px solid var(--borda); }
+.explica-corpo { padding: 12px 16px 14px; font-size: 13px; line-height: 1.55; }
+.explica-corpo p { margin: 0 0 10px; }
+.explica-corpo dl { margin: 0; display: grid; grid-template-columns: minmax(150px, 190px) 1fr; gap: 8px 16px; }
+.explica-corpo dt { font-weight: 600; }
+.explica-corpo dd { margin: 0; }
+@media (max-width: 640px) {
+  .explica-corpo dl { grid-template-columns: 1fr; gap: 2px; }
+  .explica-corpo dd { margin-bottom: 8px; }
+  .aviso-nao-salvo, .explica-custos { margin-left: 12px; margin-right: 12px; }
+}
+.escolha-rota .aviso-nao-salvo, .escolha-rota .explica-custos { margin-top: 12px; }

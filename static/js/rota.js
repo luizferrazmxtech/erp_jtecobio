@@ -57,6 +57,8 @@
       qtd: el.querySelector("input.qtd"),
       deslizar: el.querySelector("input.deslizar"),
       cilindro: el.querySelector(".cilindro-grande"),
+      salvoQtd: Number(el.dataset.salvoQtd) || 0,
+      salvoFrete: el.dataset.salvoFrete === "" ? null : Number(el.dataset.salvoFrete),
     };
   });
 
@@ -126,7 +128,8 @@
     t.el.querySelector(".posicao").textContent = posicao + "º";
     // A barra só vai até o que cabe no pedido.
     var limite = limiteDe(t);
-    t.deslizar.max = String(Math.max(limite, 1));
+    // Passos de 10 kg; o topo arredonda para cima para a barra alcançar o limite.
+    t.deslizar.max = String(Math.max(Math.ceil(limite / PASSO) * PASSO, PASSO));
     t.deslizar.disabled = limite <= 0 && sai <= 0;
     if (document.activeElement !== t.deslizar) t.deslizar.value = String(Math.min(sai, limite));
   }
@@ -211,13 +214,27 @@
     escrever("p-margem-net-kg", tem ? margemNet / alocado : null, 4);
     document.getElementById("p-margem-b").className = margemNet < 0 ? "negativo" : "positivo";
     desenharRota(escolhidos);
+    avisarNaoSalvo();
   }
+
+  // O resumo do pedido (lá em cima) mostra o que está gravado. Se a escolha na
+  // tela for diferente, avisa para salvar: senão os dois números não batem.
+  function avisarNaoSalvo() {
+    var mudou = tanques.some(function (t) {
+      var f = freteDe(t);
+      var freteMudou = (f === null) !== (t.salvoFrete === null) || (f !== null && Math.abs(f - t.salvoFrete) > 0.00005);
+      return Math.abs(qtdDe(t) - t.salvoQtd) > 0.0005 || (qtdDe(t) > 0 && freteMudou);
+    });
+    document.getElementById("p-nao-salvo").hidden = !mudou;
+  }
+
+  var PASSO = 10;  // a JT trabalha em toneladas: a barra anda de 10 em 10 kg
 
   // cru = sem ponto de milhar (enquanto a pessoa digita, para o próximo dígito não virar decimal).
   function definir(t, kg, cru) {
     kg = Math.max(0, Math.min(limiteDe(t), kg));
     if (!kg) { t.qtd.value = ""; return; }
-    t.qtd.value = cru ? String(Math.round(kg * 1000) / 1000).replace(".", ",") : paraCampo(kg, 0, 3);
+    t.qtd.value = cru ? String(Math.round(kg * 1000) / 1000).replace(".", ",") : paraCampo(kg, 0, kg % 1 ? 3 : 0);
   }
 
   // ---------- eventos ----------
@@ -232,7 +249,12 @@
     t.qtd.addEventListener("change", function () { if (qtdDe(t) > 0) definir(t, qtdDe(t)); else t.qtd.value = ""; atualizar(); });
     t.frete.addEventListener("input", atualizar);
     t.frete.addEventListener("change", function () { var f = ler(t.frete.value); if (f !== null) t.frete.value = paraCampo(f, 4, 4); atualizar(); });
-    t.deslizar.addEventListener("input", function () { definir(t, Number(t.deslizar.value)); atualizar(); });
+    // Barra: múltiplos de 10 kg; no fim dela vai até o limite exato (para esvaziar o tanque ou fechar o pedido).
+    t.deslizar.addEventListener("input", function () {
+      var v = Math.round(Number(t.deslizar.value) / PASSO) * PASSO, limite = limiteDe(t);
+      definir(t, v >= limite - PASSO / 2 ? limite : v);
+      atualizar();
+    });
     // Clicar no tanque: se já usa, tira; se não, completa o que falta (até o livre).
     t.cilindro.addEventListener("click", function () {
       definir(t, qtdDe(t) > 0 ? 0 : limiteDe(t));

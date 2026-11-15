@@ -30,7 +30,7 @@
   </div></div>
   <div class="resumo">
     <div><span>Quantidade</span><b>{{ pedido.quantidade_kg|kg }} kg</b></div>
-    <div><span>Alocado nos tanques</span><b class="{% if pedido.quantidade_alocada != pedido.quantidade_kg %}negativo{% endif %}">{{ pedido.quantidade_alocada|kg }} kg</b></div>
+    <div><span>Alocado nos tanques{% if pedido.editavel %} (salvo){% endif %}</span><b class="{% if pedido.quantidade_alocada != pedido.quantidade_kg %}negativo{% endif %}">{{ pedido.quantidade_alocada|kg }} kg</b></div>
     <div><span>Receita</span><b>R$ {{ pedido.receita|brl }}</b><span>net R$ {{ pedido.receita_net|brl }}</span></div>
     <div><span>Custo produto + frete</span><b>R$ {{ pedido.custo_total|brl }}</b><span>net R$ {{ pedido.custo_total_net|brl }}</span></div>
     <div><span>Margem net (sem impostos)</span><b class="{% if pedido.margem_net >= 0 %}positivo{% else %}negativo{% endif %}">R$ {{ pedido.margem_net|brl }}</b><span>R$ {{ pedido.margem_net_kg|num:4 }}/kg · com impostos R$ {{ pedido.margem|brl }}</span></div>
@@ -43,7 +43,7 @@
       data-pedido="{{ pedido.quantidade_kg }}" data-preco="{{ pedido.preco_unitario }}" data-fator-venda="{{ pedido.fator_venda }}" data-fator-compra="{{ pedido.fator_compra }}" data-fator-frete="0.88" data-destino="{{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}">{% csrf_token %}
   <div class="titulo">
     <div><h2>{% icone "tanque" %} De quais <b>tanques</b> sai</h2>
-      <p>Cada tanque mostra o custo do produto e o frete até {{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}, com impostos e net (sem os impostos que voltam como crédito de ICMS, PIS e COFINS). A rota sugerida usa os tanques de menor custo efetivo net até completar o pedido. Clique num tanque, arraste a barra ou digite quanto sai: o total nunca passa do pedido.</p></div>
+      <p>Cada tanque mostra o custo do produto e o frete até {{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}, com impostos e net (sem os impostos que voltam como crédito de ICMS, PIS e COFINS). A rota sugerida usa os tanques de menor custo efetivo net até completar o pedido. Clique num tanque, arraste a barra (de 10 em 10 kg) ou digite quanto sai: o total nunca passa do pedido. Falta um local? <a href="{% url 'web:adicionar' 'local' %}">Cadastre um novo local</a>.</p></div>
     <div class="acoes-rota">
       <label class="pequeno suave nowrap" for="minimo" title="Não vale mandar caminhão buscar pouco: tanques que dariam menos que isso ficam fora da sugestão.">Mínimo por tanque (kg)</label>
       <input id="minimo" value="0" inputmode="decimal" style="width:90px;height:32px">
@@ -63,13 +63,19 @@
     <div><span>Margem net</span><b id="p-margem-b">R$ <span id="p-margem-net">—</span></b><span class="pequeno suave">R$ <span id="p-margem-net-kg">—</span>/kg · com impostos R$ <span id="p-margem">—</span></span></div>
   </div>
 
+  <div class="aviso-nao-salvo" id="p-nao-salvo" hidden>{% icone "alerta" %}
+    <span>Você mudou os tanques e ainda não salvou. O resumo do pedido, lá em cima, mostra o que está gravado; estes números aqui embaixo mostram a escolha da tela. Clique em <b>Salvar tanques</b> para os dois ficarem iguais.</span></div>
+
+  {% include "vendas/_explica_custos.html" %}
+
   <div class="corpo">
     <div class="rota" id="rota" aria-hidden="true"><svg id="rota-svg"></svg></div>
     <div class="origens">
     {% for l in linhas %}
       <div class="origem{% if l.opcao.frete is None %} sem-frete{% endif %}" data-i="{{ forloop.counter0 }}"
            data-livre="{{ l.opcao.livre }}" data-saldo="{{ l.saldo }}" data-capacidade="{{ l.capacidade }}"
-           data-custo="{{ l.opcao.custo_kg }}" data-sugerido="{{ l.sugerido }}" data-nome="{{ l.opcao.local.nome }}">
+           data-custo="{{ l.opcao.custo_kg }}" data-sugerido="{{ l.sugerido }}" data-nome="{{ l.opcao.local.nome }}"
+           data-salvo-qtd="{{ l.quantidade|default:0 }}" data-salvo-frete="{% if l.frete is not None %}{{ l.frete }}{% endif %}">
         <input type="hidden" name="local_{{ forloop.counter0 }}" value="{{ l.opcao.local.pk }}">
         <input type="hidden" name="lote_{{ forloop.counter0 }}" value="{{ l.opcao.lote.pk|default:'' }}">
         <div class="cab-origem">
@@ -98,7 +104,7 @@
           <span class="pequeno suave">Livre <b>{{ l.opcao.livre|kg }}</b> kg{% if l.saldo != l.opcao.livre %} · {{ l.saldo|kg }} no tanque{% endif %}</span>
           <label class="sair">Sai <input class="qtd" name="qtd_{{ forloop.counter0 }}" value="{% if l.quantidade %}{{ l.quantidade|num:3 }}{% endif %}" inputmode="decimal" placeholder="0"> kg</label>
         </div>
-        <input type="range" class="deslizar" min="0" max="{{ l.opcao.livre }}" step="any" value="0" aria-label="Quanto sai de {{ l.opcao.local.nome }}">
+        <input type="range" class="deslizar" min="0" max="{{ l.opcao.livre }}" step="10" value="0" aria-label="Quanto sai de {{ l.opcao.local.nome }}">
       </div>
     {% empty %}
       <p class="vazio">Nenhum tanque com saldo livre de {{ pedido.produto }}.</p>

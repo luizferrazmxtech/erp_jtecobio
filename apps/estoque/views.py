@@ -30,7 +30,9 @@ def saldos(request):
 
 
 def _tela(request, form_class, titulo, executar):
-    form = form_class(request.POST or None)
+    # Campos podem vir preenchidos pelo endereço (ex.: ?local=3 a partir da lista de locais).
+    inicial = {k: v for k, v in request.GET.items() if k in form_class.base_fields}
+    form = form_class(request.POST or None, initial=inicial)
     if request.method == "POST" and form.is_valid():
         try:
             executar(form.cleaned_data, request.user)

@@ -15,7 +15,7 @@ from apps.estoque import services as estoque
 from apps.contratos.models import Contrato
 from apps.estoque.models import Lote
 
-from . import services
+from . import impostos, services
 from .forms import FaturarForm, PedidoForm
 from .models import Pedido
 
@@ -113,6 +113,34 @@ def _linhas_de_origem(pedido, origens):
     return linhas
 
 
+def _explicacao(pedido, linhas) -> dict:
+    """Números do próprio pedido para a ajuda "Como cada custo é calculado".
+
+    Usa o primeiro tanque da lista (o de menor custo efetivo net) como exemplo."""
+    q4 = Decimal("0.0001")
+    exemplo = None
+    if linhas:
+        o = linhas[0]["opcao"]
+        frete = linhas[0]["frete"]
+        exemplo = {
+            "nome": o.local.nome,
+            "custo": o.custo_kg,
+            "custo_net": o.custo_net_kg.quantize(q4),
+            "frete": frete,
+            "frete_net": impostos.frete_net(frete).quantize(q4) if frete is not None else None,
+        }
+        if frete is not None:
+            exemplo["efetivo"] = o.custo_kg + frete
+            exemplo["efetivo_net"] = exemplo["custo_net"] + exemplo["frete_net"]
+            exemplo["sobra_net"] = (pedido.preco_unitario * pedido.fator_venda).quantize(q4) - exemplo["efetivo_net"]
+    return {
+        "preco_net": (pedido.preco_unitario * pedido.fator_venda).quantize(q4),
+        "icms_venda": pedido.icms_venda or 0,
+        "icms_compra": pedido.produto.icms_compra,
+        "exemplo": exemplo,
+    }
+
+
 @login_required
 def detalhe(request, pk):
     pedido = get_object_or_404(Pedido.objects.select_related("cliente", "produto", "contrato", "nota"), pk=pk)
@@ -122,6 +150,7 @@ def detalhe(request, pk):
 
         contexto["linhas"] = _linhas_de_origem(pedido, contexto["origens"])
         contexto["classe_nivel"] = _classe_nivel(pedido.produto)
+        contexto["explica"] = _explicacao(pedido, contexto["linhas"])
     if pedido.status == Pedido.Status.CONFIRMADO:
         contexto["faturar_form"] = FaturarForm(pedido=pedido)
     return render(request, "vendas/detalhe.html", contexto)

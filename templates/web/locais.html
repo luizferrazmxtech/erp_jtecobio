@@ -17,7 +17,10 @@
       <td>{% if l.local.parceiro %}<a class="forte" href="{% url 'web:parceiro' l.local.parceiro_id %}">{{ l.local.parceiro|truncatechars:30 }}</a>{% else %}<span class="suave">—</span>{% endif %}</td>
       <td class="pequeno">{% for t in l.tanques %}<div><a href="{% url 'web:editar' 'tanque' t.pk %}">{{ t.produto.nome|truncatechars:34 }}</a> · {{ t.capacidade_kg|kg }} kg{% if "estimada" in t.identificacao %} <span class="etiqueta amarelo sem-ponto">estimada</span>{% endif %}</div>{% empty %}<span class="suave">Nenhum tanque</span>{% endfor %}</td>
       <td class="num">{% for s in l.saldos %}<div>{{ s.saldo|kg }}</div>{% empty %}—{% endfor %}</td>
-      <td class="acoes"><a class="acao" title="Editar" href="{% url 'web:editar' 'local' l.local.pk %}">{% icone "editar" %}</a></td></tr>
+      <td class="acoes">
+        <a class="acao" title="Adicionar tanque neste local" href="{% url 'web:adicionar' 'tanque' %}?local={{ l.local.pk }}">{% icone "tanque" %}</a>
+        <a class="acao" title="Dar entrada (colocar saldo)" href="{% url 'estoque:entrada' %}?local={{ l.local.pk }}">{% icone "mais" %}</a>
+        <a class="acao" title="Editar" href="{% url 'web:editar' 'local' l.local.pk %}">{% icone "editar" %}</a></td></tr>
     {% empty %}<tr><td colspan="6" class="vazio">Nenhum local cadastrado.</td></tr>{% endfor %}</tbody>
   </table></div>
 </div>
