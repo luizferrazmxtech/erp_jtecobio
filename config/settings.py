@@ -34,6 +34,9 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-inseguro-troque-em-producao")
 DEBUG = env("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = [h for h in env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 
+# Os campos de formulário usam os mesmos templates das telas (templates/web/_busca_select.html).
+FORM_RENDERER = "django.forms.renderers.TemplatesSetting"
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -42,6 +45,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "django.forms",  # modelos de campo de formulário (ex.: busca digitável) na pasta templates/
     "apps.cadastros",
     "apps.fiscal",
     "apps.contratos",

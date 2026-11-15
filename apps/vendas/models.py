@@ -113,6 +113,12 @@ class Pedido(models.Model):
     )
     data_faturamento = models.DateField(null=True, blank=True)
     observacao = models.TextField("observação", blank=True)
+    # Venda com mais de um produto: cada produto é um pedido (tem seus próprios
+    # tanques e margem); os outros apontam para o primeiro.
+    pedido_principal = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="adicionais",
+        verbose_name="mesma venda que",
+    )
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
@@ -197,6 +203,13 @@ class Pedido(models.Model):
     def impostos_venda(self) -> Decimal:
         """ICMS + PIS + COFINS da venda, já descontados os créditos da compra e do frete."""
         return (self.receita - self.receita_net) - (self.custo_total - self.custo_total_net)
+
+    @property
+    def mesma_venda(self) -> list["Pedido"]:
+        """Os outros pedidos (produtos) lançados junto com este na mesma venda."""
+        principal = self.pedido_principal or self
+        grupo = [principal, *principal.adicionais.all()]
+        return [p for p in grupo if p.pk != self.pk]
 
     @property
     def editavel(self) -> bool:

@@ -29,31 +29,64 @@
       {% with campo=form.observacao %}{% include "web/_campo.html" %}{% endwith %}
     </div>
   </div>
+  <div class="secao">
+    <div class="campos">{% with campo=form.outro_produto %}{% include "web/_campo.html" %}{% endwith %}</div>
+    <div id="outro-produto" class="campos" style="margin-top:12px">
+      <p class="suave pequeno" style="margin:0;grid-column:1/-1">Vira um segundo pedido na mesma venda, para o mesmo cliente e entrega, com tanques e margem próprios. Os dois aparecem ligados na tela do pedido.</p>
+      {% with campo=form.produto2 %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.quantidade2 %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.preco2 %}{% include "web/_campo.html" %}{% endwith %}
+    </div>
+  </div>
   <div class="rodape"><a class="botao claro" href="{% url 'vendas:lista' %}">Cancelar</a><button class="botao">Criar pedido e sugerir tanques</button></div>
 </form>
 {{ contratos|json_script:"contratos-venda" }}
 <script>
-/* Contrato: só os do cliente escolhido. Ao escolher um contrato, já preenche produto e preço. */
+/* Novo pedido:
+   - contrato: só os do cliente escolhido; ao escolher, o produto fica só o do contrato e o preço vem dele;
+   - "Incluir outro produto": mostra os campos do segundo produto (vira outro pedido na mesma venda). */
 (function () {
   var contratos = JSON.parse(document.getElementById("contratos-venda").textContent);
   var cliente = document.getElementById("id_cliente"), contrato = document.getElementById("id_contrato");
   var produto = document.getElementById("id_produto"), preco = document.getElementById("id_preco_unitario");
-  function montar() {
+  var todos = Array.prototype.map.call(produto.options, function (o) { return { v: o.value, t: o.textContent }; });
+  var ajudaProduto = document.createElement("span");
+  ajudaProduto.className = "ajuda";
+  produto.parentNode.appendChild(ajudaProduto);
+
+  function produtos(lista, escolhido) {
+    produto.innerHTML = "";
+    lista.forEach(function (p) { produto.add(new Option(p.t, p.v, false, p.v === escolhido)); });
+  }
+  function montarContratos() {
     var atual = contrato.value, lista = contratos.filter(function (c) { return String(c.cliente) === cliente.value; });
     contrato.innerHTML = "";
-    var vazio = new Option(lista.length ? "Sem contrato" : "Este cliente não tem contrato de venda aberto", "");
-    contrato.add(vazio);
+    contrato.add(new Option(!cliente.value ? "Escolha o cliente primeiro" : (lista.length ? "Sem contrato" : "Este cliente não tem contrato de venda aberto"), ""));
     lista.forEach(function (c) { contrato.add(new Option(c.texto, c.id, false, String(c.id) === atual)); });
     contrato.disabled = !lista.length;
+    aplicarContrato(false);
   }
-  cliente.addEventListener("change", montar);
-  contrato.addEventListener("change", function () {
+  function aplicarContrato(mudou) {
     var c = contratos.filter(function (x) { return String(x.id) === contrato.value; })[0];
-    if (!c) return;
-    produto.value = c.produto;
-    if (c.preco && !preco.value) preco.value = c.preco;
-  });
-  montar();
+    if (c) {
+      // Só o produto do contrato.
+      produtos(todos.filter(function (p) { return p.v === String(c.produto); }), String(c.produto));
+      ajudaProduto.textContent = "Produto do contrato. Para vender outro junto, marque \"Incluir outro produto nesta venda\".";
+      if (c.preco && (mudou || !preco.value)) preco.value = c.preco;
+    } else {
+      var atual = produto.value;
+      produtos(todos, atual);
+      ajudaProduto.textContent = "";
+    }
+  }
+  cliente.addEventListener("change", montarContratos);
+  contrato.addEventListener("change", function () { aplicarContrato(true); });
+  montarContratos();
+
+  var marca = document.getElementById("id_outro_produto"), bloco = document.getElementById("outro-produto");
+  function mostrarOutro() { bloco.hidden = !marca.checked; }
+  marca.addEventListener("change", mostrarOutro);
+  mostrarOutro();
 })();
 </script>
 {% endblock %}

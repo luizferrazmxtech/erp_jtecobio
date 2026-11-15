@@ -27,6 +27,7 @@
     <div><span>Preço</span><b>R$ {{ pedido.preco_unitario|num:4 }}/kg</b><span class="pequeno suave">net R$ {{ pedido.preco_unitario|mult:pedido.fator_venda|num:4 }} · {% if pedido.exportacao %}exportação, sem impostos{% else %}ICMS {{ pedido.icms_venda|num:0 }}% + PIS/COFINS{% endif %}</span></div>
     <div><span>Nota fiscal</span><b>{% if pedido.nota %}<a href="{% url 'web:nota' pedido.nota_id %}">NF {{ pedido.nota.numero|stringformat:"d" }}</a>{% else %}—{% endif %}</b></div>
     <div><span>Faturado em</span><b>{{ pedido.data_faturamento|date:"d/m/Y"|default:"—" }}</b></div>
+    {% with irmaos=pedido.mesma_venda %}{% if irmaos %}<div class="inteiro"><span>Na mesma venda</span><b>{% for p in irmaos %}<a href="{% url 'vendas:detalhe' p.pk %}">Pedido {{ p.numero }}</a> <span class="pequeno suave">{{ p.produto }} · {{ p.quantidade_kg|kg }} kg</span>{% if not forloop.last %} · {% endif %}{% endfor %}</b></div>{% endif %}{% endwith %}
   </div></div>
   <div class="resumo">
     <div><span>Quantidade</span><b>{{ pedido.quantidade_kg|kg }} kg</b></div>

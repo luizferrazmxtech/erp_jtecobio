@@ -455,6 +455,15 @@ class ProdutoForm(forms.ModelForm):
         fields = ["codigo", "nome", "tipo", "unidade", "densidade", "ncm", "icms_compra", "controla_estoque", "ativo"]
 
 
+def _busca(form, campo, papel, placeholder):
+    """Troca a lista do campo pela busca digitável (apps/web/busca.py)."""
+    from .busca import BuscaSelect
+
+    f = form.fields[campo]
+    f.widget = BuscaSelect(papel=papel, placeholder=placeholder)
+    f.widget.choices = f.choices
+
+
 class LocalForm(forms.ModelForm):
     """Local de armazenagem. Ao criar, já dá para cadastrar o tanque dele."""
 
@@ -476,6 +485,7 @@ class LocalForm(forms.ModelForm):
         # Qualquer parceiro ativo: uma distribuidora nova ainda pode não estar marcada como armazém.
         self.fields["parceiro"].queryset = Parceiro.objects.filter(
             Q(ativo=True) | Q(pk=self.instance.parceiro_id or 0)).order_by("razao_social")
+        _busca(self, "parceiro", "", "Digite o nome do dono do local…")
         if self.instance.pk:  # editar: os tanques ficam em "Adicionar tanque"
             for c in ("tanque_produto", "tanque_capacidade", "tanque_identificacao"):
                 del self.fields[c]
@@ -516,6 +526,7 @@ class FreteForm(forms.ModelForm):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
         self.fields["transportadora"].queryset = Parceiro.objects.filter(eh_transportadora=True).order_by("razao_social")
+        _busca(self, "transportadora", "transportadora", "Digite o nome da transportadora…")
 
 
 class ContratoForm(forms.ModelForm):
@@ -530,6 +541,7 @@ class ContratoForm(forms.ModelForm):
         super().__init__(*a, **k)
         self.fields["parceiro"].queryset = Parceiro.objects.filter(
             Q(eh_cliente=True) | Q(eh_fornecedor=True), ativo=True).order_by("razao_social")
+        _busca(self, "parceiro", "cliente,fornecedor", "Digite o nome, CNPJ ou cidade do cliente ou fornecedor…")
         self.fields["produto"].queryset = Produto.objects.filter(controla_estoque=True, ativo=True)
 
 
