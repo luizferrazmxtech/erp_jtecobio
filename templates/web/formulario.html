@@ -2,7 +2,7 @@
 {% block titulo %}{{ titulo }}{% endblock %}
 {% block icone_titulo %}{% icone icone %}{% endblock %}
 {% block titulo_pagina %}{{ titulo }}{% endblock %}
-{% block trilha %}{% icone "direita" %} <a href="{% url voltar %}">Lista</a> {% icone "direita" %} <b>{{ verbo }}</b>{% endblock %}
+{% block trilha %}{% if not sem_lista %}{% icone "direita" %} <a href="{% url voltar %}">Lista</a> {% endif %}{% icone "direita" %} <b>{{ verbo }}</b>{% endblock %}
 {% block conteudo %}
 <form method="post" class="cartao formulario">{% csrf_token %}
   {% if form.non_field_errors %}<div class="secao">{% for e in form.non_field_errors %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}</div>{% endif %}
@@ -15,7 +15,7 @@
   {% endfor %}
   <div class="rodape">
     <a class="botao claro" href="{% if obj and obj.get_absolute_url %}{{ obj.get_absolute_url }}{% else %}{% url voltar %}{% endif %}">Cancelar</a>
-    <button class="botao">{% if obj %}Salvar alterações{% else %}Cadastrar{% endif %}</button>
+    <button class="botao">{% if botao %}{{ botao }}{% elif obj %}Salvar alterações{% else %}Cadastrar{% endif %}</button>
   </div>
 </form>
 {% endblock %}

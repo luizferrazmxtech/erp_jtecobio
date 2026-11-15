@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Usuários{% endblock %}
+{% block icone_titulo %}{% icone "cadastros" %}{% endblock %}
+{% block titulo_pagina %}Usuários{% endblock %}
+{% block trilha %}{% icone "direita" %} <b>Usuários</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes"><a class="botao" href="{% url 'web:usuario_novo' %}">{% icone "mais" %} Adicionar usuário</a>
+  <span class="espaco"></span><span class="suave pequeno">Todos os usuários ativos veem todas as telas; as áreas dizem onde cada um pode lançar e alterar.</span></div>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Usuário</th><th>Nome</th><th>Pode lançar e alterar em</th><th>Último acesso</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for l in linhas %}{% with u=l.u %}<tr>
+      <td><b>{{ u.username }}</b>{% if u.email %}<span class="sub">{{ u.email }}</span>{% endif %}</td>
+      <td>{{ u.get_full_name|default:"—" }}</td>
+      <td>{% if u.is_superuser %}<span class="etiqueta verde sem-ponto">Administrador: tudo</span>{% else %}{% for a in l.areas %}<span class="etiqueta azul sem-ponto">{{ a }}</span> {% empty %}<span class="suave">Só consulta</span>{% endfor %}{% endif %}</td>
+      <td class="nowrap">{{ u.last_login|date:"d/m/Y H:i"|default:"nunca" }}</td>
+      <td>{% if u.is_active %}<span class="etiqueta verde">Ativo</span>{% else %}<span class="etiqueta cinza">Inativo</span>{% endif %}</td>
+      <td class="acoes"><a class="acao" title="Editar" href="{% url 'web:usuario' u.pk %}">{% icone "editar" %}</a></td></tr>
+    {% endwith %}{% empty %}<tr><td colspan="6" class="vazio">Nenhum usuário.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block icone_titulo %}{% icone "cadastros" %}{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'web:usuarios' %}">Usuários</a> {% icone "direita" %} <b>{% if obj %}Editar{% else %}Adicionar{% endif %}</b>{% endblock %}
+{% block conteudo %}
+<form method="post" class="cartao formulario" autocomplete="off">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="secao">{% for e in form.non_field_errors %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}</div>{% endif %}
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Preencha os <b>dados do usuário</b></h3>
+    <div class="campos">
+      {% for campo in form %}{% if campo.name in "username first_name last_name email" %}{% include "web/_campo.html" %}{% endif %}{% endfor %}
+      {% with campo=form.is_active %}{% include "web/_campo.html" %}{% endwith %}
+    </div>
+  </div>
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Defina <b>o que pode fazer</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">Todo usuário ativo consulta todas as telas. Marque onde ele pode lançar, alterar e excluir.</p>
+    <div class="campos">{% with campo=form.administrador %}{% include "web/_campo.html" %}{% endwith %}</div>
+    <p class="suave pequeno" style="margin:4px 0 0">{{ form.administrador.help_text }}</p>
+    <div class="areas-usuario" id="areas">
+      {% for opcao in form.areas %}{% with info=areas|chave:opcao.data.value %}
+      <label class="area">{{ opcao.tag }}<span><b>{{ opcao.choice_label }}</b><small>{{ info.1 }}</small></span></label>
+      {% endwith %}{% endfor %}
+    </div>
+    {% if form.perfis.field.queryset.exists %}
+    <p class="suave pequeno" style="margin:16px 0 0"><b>Perfis prontos</b> (somam com as áreas): {{ form.perfis.help_text }}</p>
+    <div class="areas-usuario perfis" id="perfis">{% for opcao in form.perfis %}<label class="area">{{ opcao.tag }}<span><b>{{ opcao.choice_label }}</b></span></label>{% endfor %}</div>
+    {% endif %}
+    {% for e in form.administrador.errors %}<p class="erro">{{ e }}</p>{% endfor %}
+  </div>
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">{% if obj %}Troque a <b>senha</b>{% else %}Crie a <b>senha</b>{% endif %}</h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">Pelo menos 8 caracteres, sem ser só números nem parecida com o nome. Combine a senha com a pessoa; depois ela pode trocar.</p>
+    <div class="campos">{% with campo=form.senha %}{% include "web/_campo.html" %}{% endwith %}{% with campo=form.senha2 %}{% include "web/_campo.html" %}{% endwith %}</div>
+  </div>
+  <div class="rodape"><a class="botao claro" href="{% url 'web:usuarios' %}">Cancelar</a><button class="botao">{% if obj %}Salvar alterações{% else %}Cadastrar usuário{% endif %}</button></div>
+</form>
+<script>
+(function () {
+  var adm = document.getElementById("id_administrador");
+  var caixas = [document.getElementById("areas"), document.getElementById("perfis")].filter(Boolean);
+  function aplicar() { caixas.forEach(function (c) { c.classList.toggle("desligado", adm.checked); }); }
+  adm.addEventListener("change", aplicar); aplicar();
+})();
+</script>
+{% endblock %}

@@ -511,3 +511,14 @@ a.cilindro-grande { display: block; }
 .campos[hidden] { display: none; }
 .dados .inteiro { grid-column: 1 / -1; }
 .dados b span.pequeno { display: inline; }
+
+/* Usuários: áreas que a pessoa pode lançar e alterar */
+.areas-usuario { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 14px; transition: opacity .15s; }
+.areas-usuario .area { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--borda); border-radius: 8px; cursor: pointer; background: #fff; }
+.areas-usuario .area:hover { border-color: var(--verde); }
+.areas-usuario .area:has(input:checked) { border-color: var(--verde); background: #f1faf6; }
+.areas-usuario .area input { margin-top: 2px; flex: none; }
+.areas-usuario .area span { display: flex; flex-direction: column; gap: 2px; }
+.areas-usuario .area small { color: var(--suave); font-size: 12.5px; }
+.areas-usuario.desligado { opacity: .45; pointer-events: none; }
+.secao > p.erro { color: var(--vermelho); font-size: 12.5px; margin-top: 8px; }

@@ -164,7 +164,8 @@ def test_ligar_e_desligar_nota_no_contrato(logado, dados, glicerina):
 
 def test_menu_sem_administracao(logado, dados):
     html = logado.get("/").content.decode()
-    assert "Administração" not in html and "Usuários e acessos" in html
+    assert "Administração" not in html and "/admin/" not in html
+    assert "/sistema/usuarios/" in html and "/sistema/configuracoes/" in html
 
 
 def test_saldos_por_tanque_mostra_tanques_com_resumo(logado, dados, glicerina, aroma):
@@ -211,3 +212,53 @@ def test_outro_produto_exige_dados(logado, dados, glicerina):
         "preco_unitario": "7.63", "destino_uf": "SP", "outro_produto": "on",
     })
     assert resp.status_code == 200 and "Escolha o outro produto." in resp.content.decode()
+
+
+def test_criar_usuario_com_areas_pela_tela(logado, db):
+    resp = logado.post("/sistema/usuarios/novo/", {
+        "username": "maria.silva", "first_name": "Maria", "is_active": "on", "areas": ["vendas", "estoque"],
+        "senha": "Tanque-Glicerina-77", "senha2": "Tanque-Glicerina-77"})
+    assert resp.status_code == 302 and resp["Location"] == "/sistema/usuarios/"
+    u = User.objects.get(username="maria.silva")
+    assert u.check_password("Tanque-Glicerina-77") and not u.is_superuser
+    assert u.has_perm("vendas.add_pedido") and u.has_perm("estoque.add_movimentacao")
+    assert not u.has_perm("cadastros.add_produto")
+    html = logado.get("/sistema/usuarios/").content.decode()
+    assert "maria.silva" in html and "Vendas" in html
+
+
+def test_editar_usuario_tira_area_e_mantem_senha(logado, db):
+    from django.contrib.auth.models import Group
+    perfil = Group.objects.create(name="Comercial")
+    u = User.objects.create_user("joao", password="Senha-Antiga-Forte-9")
+    logado.post("/sistema/usuarios/novo/", {})  # formulário vazio não quebra
+    resp = logado.post(f"/sistema/usuarios/{u.pk}/", {
+        "username": "joao", "is_active": "on", "areas": ["cadastros"], "perfis": [perfil.pk]})
+    assert resp.status_code == 302
+    u = User.objects.get(pk=u.pk)
+    assert u.check_password("Senha-Antiga-Forte-9")
+    assert u.has_perm("cadastros.add_produto") and not u.has_perm("vendas.add_pedido")
+    assert set(u.groups.values_list("name", flat=True)) == {"Comercial", "Área: Cadastros"}
+
+
+def test_senhas_diferentes_e_tirar_o_proprio_admin(logado, db):
+    resp = logado.post("/sistema/usuarios/novo/", {"username": "x", "is_active": "on", "senha": "Abc-12345-xyz", "senha2": "outra"})
+    assert resp.status_code == 200 and "não são iguais" in resp.content.decode()
+    eu = User.objects.get(username="luiz")
+    resp = logado.post(f"/sistema/usuarios/{eu.pk}/", {"username": "luiz", "is_active": "on"})
+    assert resp.status_code == 200 and User.objects.get(pk=eu.pk).is_superuser
+
+
+def test_telas_de_sistema_so_para_administrador(client, db):
+    client.force_login(User.objects.create_user("visitante", password="senha-de-teste-123"))
+    for url in ("/sistema/usuarios/", "/sistema/usuarios/novo/", "/sistema/configuracoes/"):
+        assert client.get(url).status_code == 302
+    assert "/sistema/usuarios/" not in client.get("/").content.decode()
+
+
+def test_configuracoes_pela_tela(logado, db):
+    from apps.estoque.models import Configuracao
+    assert logado.get("/sistema/configuracoes/").status_code == 200
+    resp = logado.post("/sistema/configuracoes/", {"metodo_custo": Configuracao.atual().metodo_custo, "permitir_saldo_negativo": "on"})
+    assert resp.status_code == 302
+    assert Configuracao.atual().permitir_saldo_negativo
