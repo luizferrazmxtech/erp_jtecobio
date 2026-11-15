@@ -105,26 +105,108 @@ def tanques_com_saldo():
     return lista
 
 
-def _vendas_por_mes(hoje: date, meses=12):
-    """Faturamento das NF-e de venda (CFOP 5.1xx, 6.1xx, 7.1xx), não canceladas."""
-    inicio = date(hoje.year - (1 if hoje.month < meses else 0), (hoje.month - meses) % 12 + 1, 1)
+# CFOPs de venda (5.1xx, 6.1xx, 7.1xx) e de serviço de industrialização/envase
+# (5.124, 5.125, 6.124, 6.125), que não é venda de produto.
+CFOP_SERVICO = ("5124", "5125", "6124", "6125")
+NOTA_DE_VENDA = (Q(cfop__startswith="51") | Q(cfop__startswith="61") | Q(cfop__startswith="71")) & ~Q(cfop__in=CFOP_SERVICO)
+NOTA_DE_SERVICO = Q(cfop__in=CFOP_SERVICO)
+
+
+def _escala(maior: Decimal, divisoes=4) -> list[Decimal]:
+    """Marcas redondas do eixo do gráfico: 0, 5 mi, 10 mi, 15 mi, 20 mi."""
+    if maior <= 0:
+        return [ZERO, Decimal(1)]
+    bruto = float(maior) / divisoes
+    potencia = 10 ** (len(str(int(bruto))) - 1)
+    passo = next(m * potencia for m in (1, 2, 2.5, 5, 10) if m * potencia >= bruto)
+    return [Decimal(str(passo * i)) for i in range(divisoes + 1)]
+
+
+def _total_por_mes(filtro, inicio) -> dict[str, Decimal]:
     linhas = (
         NotaFiscal.objects.filter(direcao=NotaFiscal.Direcao.SAIDA, cancelada=False, data_emissao__gte=inicio)
-        .filter(Q(cfop__startswith="51") | Q(cfop__startswith="61") | Q(cfop__startswith="71"))
-        .annotate(mes=TruncMonth("data_emissao")).values("mes").annotate(total=Sum("valor_total")).order_by("mes")
+        .filter(filtro).annotate(mes=TruncMonth("data_emissao")).values("mes")
+        .annotate(total=Sum("valor_total")).order_by("mes")
     )
-    por_mes = {l["mes"].strftime("%Y-%m") if hasattr(l["mes"], "strftime") else str(l["mes"])[:7]: l["total"] for l in linhas}
-    resultado, ano, mes = [], inicio.year, inicio.month
+    return {(l["mes"].strftime("%Y-%m") if hasattr(l["mes"], "strftime") else str(l["mes"])[:7]): l["total"]
+            for l in linhas}
+
+
+def _vendas_por_mes(hoje: date, meses=12) -> dict:
+    """Faturamento por mês, separado em vendas de produto e serviços (envase).
+
+    Os serviços vêm hoje das NF-e de industrialização. Quando existirem as
+    ordens de serviço, o valor delas entra em `servicos` do mesmo mês."""
+    inicio = date(hoje.year - (1 if hoje.month < meses else 0), (hoje.month - meses) % 12 + 1, 1)
+    vendas_ = _total_por_mes(NOTA_DE_VENDA, inicio)
+    servicos = _total_por_mes(NOTA_DE_SERVICO, inicio)
+    colunas, ano, mes = [], inicio.year, inicio.month
     for _ in range(meses):
         chave = f"{ano}-{mes:02d}"
-        resultado.append({"rotulo": f"{MESES[mes - 1]}/{str(ano)[2:]}", "total": por_mes.get(chave) or ZERO})
+        v, s_ = vendas_.get(chave) or ZERO, servicos.get(chave) or ZERO
+        colunas.append({"rotulo": f"{MESES[mes - 1]}/{str(ano)[2:]}", "vendas": v, "servicos": s_, "total": v + s_})
         mes += 1
         if mes > 12:
             mes, ano = 1, ano + 1
-    maior = max((r["total"] for r in resultado), default=ZERO) or 1
-    for r in resultado:
-        r["altura"] = int(r["total"] * 100 / maior)
-    return resultado
+    escala = _escala(max((c["total"] for c in colunas), default=ZERO))
+    topo = escala[-1]
+    for c in colunas:
+        c["h_vendas"] = float(c["vendas"] * 100 / topo)
+        c["h_servicos"] = float(c["servicos"] * 100 / topo)
+        c["h_total"] = c["h_vendas"] + c["h_servicos"]
+    total_vendas = sum((c["vendas"] for c in colunas), ZERO)
+    total_servicos = sum((c["servicos"] for c in colunas), ZERO)
+    return {
+        "colunas": colunas, "total_vendas": total_vendas, "total_servicos": total_servicos,
+        "total": total_vendas + total_servicos,
+        "escala": [{"valor": v, "pos": float(v * 100 / topo)} for v in reversed(escala)],
+    }
+
+
+def _melhores_fornecedores(hoje: date, limite=6) -> list[dict]:
+    """Fornecedores que deixam mais margem, comparando o custo de cada um
+    (produto + frete, sem impostos) com o preço médio de venda do mesmo
+    produto nos contratos de venda dos últimos 12 meses."""
+    from apps.vendas import impostos
+
+    inicio = date(hoje.year - 1, hoje.month, 1)
+    validos = Contrato.objects.filter(mes_referencia__gte=inicio).exclude(status=Contrato.Status.CANCELADO)
+
+    venda = defaultdict(lambda: [ZERO, ZERO])  # produto → [kg, receita net]
+    for c in validos.filter(tipo=Contrato.Tipo.VENDA).select_related("parceiro"):
+        exp = c.modalidade == Contrato.Modalidade.EXPORTACAO
+        f = impostos.fator(0 if exp else impostos.icms_venda_padrao(c.parceiro.uf), pis_cofins=not exp)
+        venda[c.produto_id][0] += c.quantidade_kg
+        venda[c.produto_id][1] += c.quantidade_kg * c.preco_unitario * f
+
+    grupos = defaultdict(lambda: {"kg": ZERO, "produto": ZERO, "frete": ZERO, "contratos": 0})
+    for c in validos.filter(tipo=Contrato.Tipo.COMPRA).select_related("parceiro", "produto"):
+        g = grupos[(c.parceiro, c.produto)]
+        g["kg"] += c.quantidade_kg
+        g["produto"] += c.quantidade_kg * c.preco_unitario
+        g["frete"] += c.quantidade_kg * (c.frete_previsto or ZERO)
+        g["contratos"] += 1
+
+    linhas = []
+    for (parceiro, produto), g in grupos.items():
+        if not g["kg"]:
+            continue
+        custo, frete = g["produto"] / g["kg"], g["frete"] / g["kg"]
+        efetivo_net = custo * impostos.fator(produto.icms_compra) + impostos.frete_net(frete)
+        kg_v, receita_v = venda.get(produto.pk, (ZERO, ZERO))
+        preco_venda_net = receita_v / kg_v if kg_v else None
+        linhas.append({
+            "parceiro": parceiro, "produto": produto, "kg": g["kg"], "contratos": g["contratos"],
+            "custo": custo, "frete": frete, "efetivo": custo + frete, "efetivo_net": efetivo_net,
+            "preco_venda_net": preco_venda_net,
+            "margem_net": preco_venda_net - efetivo_net if preco_venda_net is not None else None,
+        })
+    linhas.sort(key=lambda l: (l["margem_net"] is None, -(l["margem_net"] or 0), l["efetivo_net"]))
+    linhas = linhas[:limite]
+    maior = max((l["margem_net"] for l in linhas if l["margem_net"] and l["margem_net"] > 0), default=None)
+    for l in linhas:
+        l["pct"] = int(l["margem_net"] * 100 / maior) if maior and l["margem_net"] and l["margem_net"] > 0 else 0
+    return linhas
 
 
 def _somar_saldos(contratos) -> dict:
@@ -153,11 +235,11 @@ def painel(request):
     vendas_mes = _vendas_por_mes(hoje)
     notas_mes = NotaFiscal.objects.filter(
         direcao=NotaFiscal.Direcao.SAIDA, cancelada=False, data_emissao__year=hoje.year, data_emissao__month=hoje.month,
-    ).filter(Q(cfop__startswith="51") | Q(cfop__startswith="61") | Q(cfop__startswith="71"))
+    ).filter(NOTA_DE_VENDA)
     pedidos_abertos = Pedido.objects.filter(status__in=[Pedido.Status.RASCUNHO, Pedido.Status.CONFIRMADO])
     maiores_clientes = (
         NotaFiscal.objects.filter(direcao=NotaFiscal.Direcao.SAIDA, cancelada=False, data_emissao__year=hoje.year)
-        .filter(Q(cfop__startswith="51") | Q(cfop__startswith="61") | Q(cfop__startswith="71"))
+        .filter(NOTA_DE_VENDA)
         .values("parceiro", "parceiro__razao_social", "parceiro__nome_fantasia")
         .annotate(total=Sum("valor_total"), notas=Count("id")).order_by("-total")[:6]
     )
@@ -176,8 +258,8 @@ def painel(request):
         "notas_mes": notas_mes.count(),
         "pedidos_abertos": pedidos_abertos.count(),
         "ultimos_pedidos": Pedido.objects.select_related("cliente", "produto")[:6],
-        "vendas_mes": vendas_mes,
-        "total_12m": sum((v["total"] for v in vendas_mes), ZERO),
+        "grafico": vendas_mes,
+        "fornecedores": _melhores_fornecedores(hoje),
         "maiores_clientes": [
             {**c, "pct": int(c["total"] * 100 / maior_cliente)} for c in maiores_clientes
         ],
@@ -386,7 +468,7 @@ def parceiro(request, pk):
     p = get_object_or_404(Parceiro, pk=pk)
     notas_qs = p.notas.order_by("-data_emissao")
     vendas_ano = (notas_qs.filter(direcao=NotaFiscal.Direcao.SAIDA, cancelada=False)
-                  .filter(Q(cfop__startswith="51") | Q(cfop__startswith="61") | Q(cfop__startswith="71"))
+                  .filter(NOTA_DE_VENDA)
                   .aggregate(t=Sum("valor_total"), n=Count("id")))
     return render(request, "web/parceiro.html", {
         "p": p, "notas": notas_qs[:15], "total_notas": notas_qs.count(), "vendas": vendas_ano,

@@ -262,3 +262,29 @@ def test_configuracoes_pela_tela(logado, db):
     resp = logado.post("/sistema/configuracoes/", {"metodo_custo": Configuracao.atual().metodo_custo, "permitir_saldo_negativo": "on"})
     assert resp.status_code == 302
     assert Configuracao.atual().permitir_saldo_negativo
+
+
+def test_grafico_separa_vendas_de_servicos_de_envase(logado, dados):
+    NotaFiscal.objects.create(direcao="S", numero=4017, parceiro=dados["cliente"], data_emissao=date.today(),
+                              cfop="5124", valor_total="8000.00")
+    resp = logado.get("/")
+    g = resp.context["grafico"]
+    mes = g["colunas"][-1]
+    assert mes["vendas"] == Decimal("211950.00") and mes["servicos"] == Decimal("8000.00")
+    assert g["escala"][0]["valor"] >= mes["total"] and g["escala"][-1]["valor"] == 0
+    assert resp.context["faturado_mes"] == Decimal("211950.00")  # envase não conta como venda de produto
+    html = resp.content.decode()
+    assert "Serviços (envase)" in html and "R$ 8.000,00" in html
+
+
+def test_melhores_fornecedores_pela_margem_sobre_a_venda(logado, dados, glicerina):
+    usina_cara = Parceiro.objects.create(razao_social="USINA CARA", eh_fornecedor=True, uf="MT")
+    usina_boa = Parceiro.objects.create(razao_social="USINA BOA", eh_fornecedor=True, uf="MT")
+    mes = date.today().replace(day=1)
+    Contrato.objects.create(numero="C1", tipo="C", parceiro=usina_cara, produto=glicerina, quantidade_kg=100000,
+                            preco_unitario="3.50", frete_previsto="0.50", mes_referencia=mes)
+    Contrato.objects.create(numero="C2", tipo="C", parceiro=usina_boa, produto=glicerina, quantidade_kg=50000,
+                            preco_unitario="3.20", frete_previsto="0.20", mes_referencia=mes)
+    forn = logado.get("/").context["fornecedores"]
+    assert [f["parceiro"].razao_social for f in forn] == ["USINA BOA", "USINA CARA"]
+    assert forn[0]["efetivo"] == Decimal("3.40") and forn[0]["margem_net"] > forn[1]["margem_net"] > 0
