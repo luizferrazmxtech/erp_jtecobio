@@ -1,0 +1,121 @@
+{% extends "base.html" %}{% load erp l10n %}
+{% block titulo %}{{ os }}{% endblock %}
+{% block icone_titulo %}{% icone "envase" %}{% endblock %}
+{% block titulo_pagina %}Ordem de serviço {{ os.numero }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'servicos:lista' %}">Serviços</a> {% icone "direita" %} <b>OS {{ os.numero }}</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes">
+  {% if os.em_aberto %}<a class="botao verde" href="{% url 'servicos:operador_os' os.pk %}">{% icone "relogio" %} Apontar tempo</a>{% endif %}
+  {% if pode_editar %}
+    {% if os.editavel %}<a class="botao claro" href="{% url 'servicos:editar' os.pk %}">{% icone "editar" %} Editar</a>{% endif %}
+    {% if os.status == "CONCLUIDA" %}<form method="post" action="{% url 'servicos:reabrir' os.pk %}">{% csrf_token %}<button class="botao claro">{% icone "voltar" %} Reabrir</button></form>{% endif %}
+    {% if os.status != "FATURADA" and os.status != "CANCELADA" %}<form method="post" action="{% url 'servicos:cancelar' os.pk %}" onsubmit="return confirm('Cancelar a {{ os }}?')">{% csrf_token %}<button class="botao perigo">{% icone "fechar" %} Cancelar OS</button></form>{% endif %}
+  {% endif %}
+  <span class="espaco"></span>{% situacao os.status %}
+</div>
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "envase" %} Dados da <b>OS</b></h2>{% if os.observacao %}<p>{{ os.observacao }}</p>{% endif %}</div></div>
+  <div class="corpo"><div class="dados">
+    <div><span>Cliente</span><b><a href="{% url 'web:parceiro' os.cliente_id %}">{{ os.cliente.razao_social }}</a></b></div>
+    <div><span>Produto</span><b>{{ os.nome_produto }}</b><span class="pequeno suave">densidade {{ os.densidade|num:4 }} kg/L</span></div>
+    <div><span>Aberta em</span><b>{{ os.data|date:"d/m/Y" }}</b></div>
+    <div><span>Placa</span><b>{{ os.placa|default:"—" }}</b></div>
+    <div><span>NF / remessa do cliente</span><b>{{ os.nf_cliente|default:"—" }}</b></div>
+    <div><span>Pedido / OC do cliente</span><b>{{ os.pedido_cliente|default:"—" }}</b></div>
+    <div><span>Lote</span><b>{{ os.lote|default:"—" }}</b></div>
+    <div><span>Nota do serviço</span><b>{% if os.nota %}<a href="{% url 'web:nota' os.nota_id %}">NF {{ os.nota.numero|stringformat:"d" }}</a>{% elif os.status == "FATURADA" %}faturada sem nota ligada{% else %}—{% endif %}</b></div>
+  </div></div>
+  <div class="resumo">
+    <div><span>Recebido</span><b>{{ os.quantidade_kg|kg }} kg</b>{% if os.kg_envasado %}<span>envasado {{ os.kg_envasado|kg }} kg</span>{% endif %}</div>
+    <div><span>Valor do serviço{% if not os.concluida %} (previsto){% endif %}</span><b>R$ {{ os.valor|brl }}</b></div>
+    <div><span>Impostos ({{ os.aliquota_total|num:2 }}%)</span><b>R$ {{ os.impostos|brl }}</b><span>ISS {{ os.aliquota_iss|num:2 }} · PIS {{ os.aliquota_pis|num:2 }} · COFINS {{ os.aliquota_cofins|num:2 }}</span></div>
+    <div><span>Líquido</span><b class="positivo">R$ {{ os.valor_liquido|brl }}</b></div>
+    <div><span>Mão de obra</span><b>{{ ind.homem_min|duracao }}</b><span>previsto {{ ind.previsto_min|duracao }}{% if ind.eficiencia %} · eficiência {{ ind.eficiencia }}%{% endif %}</span></div>
+  </div>
+</div>
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "envase" %} <b>Fracionamento</b></h2>
+    <p>Previsto pelo sistema (maiores primeiro, respeitando quantos o cliente trouxe){% if os.concluida %} e o que foi cheio de fato{% endif %}.</p></div></div>
+  {% if sobra > 0 %}<div class="corpo" style="padding-bottom:0"><div class="aviso erro">{% icone "alerta" %}<div><b>{{ sobra|kg }} kg</b> não cabem nos recipientes informados.{% if os.editavel %} <a href="{% url 'servicos:editar' os.pk %}">Edite a OS</a> para incluir mais recipientes.{% endif %}</div></div></div>{% endif %}
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Recipiente</th><th class="num">Capacidade (kg)</th><th class="num">Trouxe</th><th class="num">Previsto</th><th class="num">kg previsto</th><th class="num">R$/kg</th><th class="num">Tempo padrão</th>{% if os.concluida %}<th class="num">Cheios</th><th class="num">kg envasado</th>{% endif %}<th class="num">Valor (R$)</th></tr></thead>
+    <tbody>{% for i in itens %}
+      <tr><td><b>{{ i.tipo.nome }}</b></td><td class="num">{{ i.capacidade_kg|kg }}</td><td class="num">{{ i.disponivel|default:"sem limite" }}</td>
+        <td class="num">{{ i.unidades_previstas }}{% if i.parcial_kg > 0 %}<span class="sub">+ 1 com {{ i.parcial_kg|kg }} kg</span>{% endif %}</td>
+        <td class="num">{{ i.kg_previsto|kg }}</td><td class="num">{{ i.preco_kg|num:4 }}</td>
+        <td class="num">{{ i.tempo_padrao_min|num:1 }} min/un.<span class="sub">{{ i.minutos_previstos|duracao }}</span></td>
+        {% if os.concluida %}<td class="num">{{ i.unidades_cheias|default:0 }}</td><td class="num">{{ i.kg_realizado|kg }}</td>{% endif %}
+        <td class="num">{% if os.concluida %}{{ i.valor_realizado|brl }}{% else %}{{ i.valor_previsto|brl }}{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="10" class="vazio">Nenhum recipiente informado.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+{% if os.em_aberto and pode_editar and os.apontamentos.exists %}
+{% localize off %}
+<form method="post" action="{% url 'servicos:concluir' os.pk %}" class="cartao mb">{% csrf_token %}
+  <div class="titulo"><div><h2>{% icone "ok" %} Concluir a <b>OS</b></h2>
+    <p>Normalmente o próprio operador conclui na tela de apontamento. Informe quantos recipientes de cada tipo foram enchidos (contando o incompleto) e quantos kg. Quem ainda estiver com a OS aberta é finalizado agora.</p></div></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Recipiente</th><th class="num">Previsto</th><th class="num">Enchidos</th><th class="num">kg envasados</th></tr></thead>
+    <tbody>{% for i in itens %}<tr><td>{{ i.tipo.nome }}</td><td class="num">{{ i.unidades_total_previstas }} · {{ i.kg_previsto|kg }} kg</td>
+      <td class="num"><input name="unidades_{{ i.pk }}" value="{{ i.unidades_total_previstas }}" inputmode="numeric" style="width:90px"></td>
+      <td class="num"><input name="kg_{{ i.pk }}" value="{{ i.kg_previsto|floatformat:'0' }}" inputmode="decimal" style="width:120px"></td></tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="rodape-tabela"><span></span><button class="botao verde">{% icone "ok" %} Concluir OS</button></div>
+</form>
+{% endlocalize %}
+{% endif %}
+
+{% if notas or os.status == "CONCLUIDA" and pode_editar %}
+<form method="post" action="{% url 'servicos:faturar' os.pk %}" class="cartao mb">{% csrf_token %}
+  <div class="titulo"><div><h2>{% icone "fiscal" %} <b>Faturar</b></h2>
+    <p>A nota de prestação de serviço é emitida no sistema emissor; quando ela chegar na importação, ligue aqui. Também dá para marcar como faturada sem nota.</p></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select name="nota" style="min-width:260px"><option value="">Sem nota ligada</option>{% for n in notas %}<option value="{{ n.pk }}">NF {{ n.numero|stringformat:"d" }} · {{ n.data_emissao|date:"d/m/Y" }} · R$ {{ n.valor_total|brl }}{% if n.natureza %} · {{ n.natureza|truncatechars:24 }}{% endif %}</option>{% endfor %}</select>
+      <button class="botao">{% icone "ok" %} Marcar como faturada</button></div></div>
+</form>
+{% endif %}
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "relogio" %} Mão de obra e <b>TMO</b></h2>
+    <p>Calculado pelos apontamentos: cada funcionário tem o próprio relógio; pausas não contam como trabalho. TMO = minutos de mão de obra ÷ recipientes{% if not os.concluida %} previstos{% endif %}.</p></div></div>
+  <div class="resumo">
+    <div><span>Mão de obra (homem-hora)</span><b>{{ ind.homem_min|duracao }}</b><span>{{ ind.funcionarios }} funcionário{{ ind.funcionarios|pluralize }}</span></div>
+    <div><span>Duração no relógio</span><b>{{ ind.duracao_min|duracao }}</b><span>do primeiro início ao último fim</span></div>
+    <div><span>Tempo parado</span><b>{{ ind.parado_min|duracao }}</b></div>
+    <div><span>TMO por recipiente</span><b>{% if ind.tmo_min %}{{ ind.tmo_min|num:1 }} min{% else %}—{% endif %}</b><span>{{ ind.unidades }} recipiente{{ ind.unidades|pluralize }}</span></div>
+    <div><span>Previsto pelo tempo padrão</span><b>{{ ind.previsto_min|duracao }}</b>{% if ind.eficiencia %}<span class="{% if ind.eficiencia >= 100 %}positivo{% else %}negativo{% endif %}">eficiência {{ ind.eficiencia }}%</span>{% endif %}</div>
+  </div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Funcionário</th><th>Situação</th><th>Início</th><th>Fim</th><th class="num">Trabalhado</th><th class="num">Parado</th><th>Pausas</th></tr></thead>
+    <tbody>{% for t in tempos %}
+      <tr><td><b>{{ t.funcionario.get_full_name|default:t.funcionario.username }}</b></td><td>{% situacao t.situacao %}</td>
+        <td class="nowrap">{{ t.inicio|date:"d/m H:i" }}</td><td class="nowrap">{{ t.fim|date:"d/m H:i"|default:"—" }}</td>
+        <td class="num">{{ t.trabalhado|duracao_seg }}</td><td class="num">{{ t.parado|duracao_seg }}</td>
+        <td>{% for p in t.pausas %}<span class="pequeno">{{ p.0|date:"H:i" }}–{{ p.1|date:"H:i"|default:"agora" }} {{ p.2 }}{% if p.3 %} ({{ p.3 }}){% endif %}</span>{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="vazio">Ninguém apontou nesta OS ainda.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "transferir" %} <b>Apontamentos</b></h2><p>Cada toque na tela de apontamento, com a hora do sistema. Correções do supervisor ficam marcadas.</p></div></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Quando</th><th>Funcionário</th><th>O quê</th><th>Motivo / observação</th><th>Lançado por</th></tr></thead>
+    <tbody>{% for a in apontamentos %}
+      <tr><td class="nowrap">{{ a.momento|date:"d/m/Y H:i:s" }}</td><td>{{ a.funcionario.get_full_name|default:a.funcionario.username }}</td>
+        <td>{{ a.get_evento_display }}</td><td>{{ a.get_motivo_display }}{% if a.observacao %} {{ a.observacao }}{% endif %}</td>
+        <td>{% if a.corrigido %}<span class="etiqueta amarelo">correção</span> {% endif %}{{ a.registrado_por.get_full_name|default:a.registrado_por.username|default:"—" }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="vazio">Sem apontamentos.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if correcao and pode_editar %}
+  <details class="secao-correcao"><summary class="botao claro pequeno">{% icone "editar" %} Corrigir: lançar um apontamento esquecido</summary>
+    <form method="post" action="{% url 'servicos:corrigir' os.pk %}" class="corpo">{% csrf_token %}
+      <div class="campos">{% for campo in correcao %}{% include "web/_campo.html" %}{% endfor %}</div>
+      <div style="margin-top:12px"><button class="botao">{% icone "ok" %} Lançar correção</button></div>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "servicos/_operador_base.html" %}{% load erp l10n %}
+{% block titulo %}OS {{ os.numero }}{% endblock %}
+{% block conteudo %}
+<a class="op-link-voltar" href="{% url 'servicos:operador' %}">{% icone "voltar" %} Todas as OS</a>
+<div class="op-os">
+  <div class="op-cab"><h1 class="op-titulo">OS {{ os.numero }}</h1>{% situacao os.status %}</div>
+  <div class="op-cliente">{{ os.cliente }}</div>
+  <div class="suave">{{ os.nome_produto }} · {{ os.quantidade_kg|kg }} kg{% if os.placa %} · placa {{ os.placa }}{% endif %}{% if os.lote %} · lote {{ os.lote }}{% endif %}</div>
+  <div class="op-recip">{% for i in itens %}<span><b>{{ i.unidades_previstas }}</b> × {{ i.tipo.nome }}{% if i.parcial_kg > 0 %} + 1 com {{ i.parcial_kg|kg }} kg{% endif %}</span>{% endfor %}</div>
+  <div class="pequeno suave">Tempo previsto: {{ ind.previsto_min|duracao }} de mão de obra</div>
+</div>
+
+{% if os.em_aberto %}
+<div class="op-relogio {{ meu.situacao }}" id="relogio" data-base="{{ meu.trabalhado|floatformat:'0'|unlocalize }}" data-rodando="{% if meu.situacao == 'trabalhando' %}1{% endif %}">
+  <span class="op-rotulo">{% if meu.situacao == "trabalhando" %}Trabalhando{% elif meu.situacao == "pausado" %}Pausado{% elif meu.situacao == "finalizado" %}Você finalizou{% else %}Você ainda não iniciou{% endif %}</span>
+  <b id="cronometro">{{ meu.trabalhado|duracao_seg }}</b>
+  <span class="pequeno">seu tempo trabalhado nesta OS{% if meu.parado %} · parado {{ meu.parado|duracao_seg }}{% endif %}</span>
+</div>
+
+<div class="op-botoes">
+  {% if meu.situacao == "livre" or meu.situacao == "finalizado" %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="INICIO"><button class="op-botao iniciar">{% icone "play" %} {% if meu.situacao == "finalizado" %}Voltar a trabalhar{% else %}Iniciar{% endif %}</button></form>
+  {% endif %}
+  {% if meu.situacao == "trabalhando" %}
+    <button type="button" class="op-botao pausar" id="abrir-pausa">{% icone "pausa" %} Pausar</button>
+  {% endif %}
+  {% if meu.situacao == "pausado" %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="RETOMADA"><button class="op-botao iniciar">{% icone "play" %} Retomar</button></form>
+  {% endif %}
+  {% if meu.situacao == "trabalhando" or meu.situacao == "pausado" %}
+    <form method="post" onsubmit="return confirm('Finalizar o seu trabalho nesta OS?')">{% csrf_token %}<input type="hidden" name="evento" value="FIM"><button class="op-botao finalizar">{% icone "parar" %} Finalizar</button></form>
+  {% endif %}
+</div>
+
+<form method="post" class="op-pausa" id="pausa" hidden>{% csrf_token %}
+  <input type="hidden" name="evento" value="PAUSA">
+  <h2>Por que vai pausar?</h2>
+  <div class="op-motivos">{% for v, n in motivos %}<button name="motivo" value="{{ v }}" class="op-motivo">{{ n }}</button>{% endfor %}</div>
+  <input name="observacao" placeholder="Observação (opcional)" maxlength="200">
+  <button type="button" class="botao claro" id="fechar-pausa">Voltar</button>
+</form>
+
+{% if pode_concluir %}
+{% localize off %}
+<form method="post" action="{% url 'servicos:concluir' os.pk %}" class="op-concluir">{% csrf_token %}
+  <input type="hidden" name="voltar" value="operador">
+  <h2>Terminou a OS? Quantos recipientes foram enchidos?</h2>
+  <p class="pequeno suave">Conte também o recipiente que ficou incompleto. Se ninguém mais vai trabalhar nesta OS, confira e toque em Concluir.</p>
+  {% for i in itens %}
+  <div class="op-linha-concluir">
+    <span><b>{{ i.tipo.nome }}</b><span class="pequeno suave">previsto {{ i.unidades_total_previstas }}</span></span>
+    <input type="hidden" name="kg_{{ i.pk }}" value="">
+    <div class="op-contador"><button type="button" data-passo="-1">−</button><input name="unidades_{{ i.pk }}" value="{{ i.unidades_total_previstas }}" inputmode="numeric"><button type="button" data-passo="1">+</button></div>
+  </div>
+  {% endfor %}
+  <button class="op-botao concluir">{% icone "ok" %} Concluir OS</button>
+</form>
+{% endlocalize %}
+{% elif meu.situacao == "finalizado" %}
+<p class="op-aviso">Ainda tem colega trabalhando nesta OS. Quem terminar por último conclui a OS.</p>
+{% endif %}
+{% else %}
+<div class="op-vazio">Esta OS está {{ os.get_status_display|lower }} e não aceita mais apontamentos.</div>
+{% endif %}
+
+{% if outros %}
+<div class="op-equipe"><h2>Equipe nesta OS</h2>
+  {% for t in outros %}<div><span>{{ t.funcionario.get_full_name|default:t.funcionario.username }}</span>{% situacao t.situacao %}<b>{{ t.trabalhado|duracao_seg }}</b></div>{% endfor %}
+</div>
+{% endif %}
+
+{% if eventos %}
+<div class="op-equipe"><h2>Seus apontamentos</h2>
+  {% for a in eventos %}<div><span>{{ a.momento|date:"H:i" }}</span><span>{{ a.get_evento_display }}{% if a.motivo %} · {{ a.get_motivo_display }}{% endif %}</span></div>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var r = document.getElementById("relogio");
+  if (r && r.dataset.rodando) {
+    var base = parseInt(r.dataset.base, 10) || 0, t0 = Date.now(), alvo = document.getElementById("cronometro");
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function tic() {
+      var s = base + Math.floor((Date.now() - t0) / 1000);
+      alvo.textContent = Math.floor(s / 3600) + ":" + pad(Math.floor(s % 3600 / 60)) + ":" + pad(s % 60);
+    }
+    tic(); setInterval(tic, 1000);
+  }
+  var pausa = document.getElementById("pausa"), abrir = document.getElementById("abrir-pausa");
+  if (abrir) abrir.addEventListener("click", function () { pausa.hidden = false; pausa.scrollIntoView({ behavior: "smooth" }); });
+  var fechar = document.getElementById("fechar-pausa");
+  if (fechar) fechar.addEventListener("click", function () { pausa.hidden = true; });
+  document.querySelectorAll(".op-contador button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var i = b.parentNode.querySelector("input");
+      i.value = Math.max(0, (parseInt(i.value, 10) || 0) + parseInt(b.dataset.passo, 10));
+    });
+  });
+  // Mantém a tela atualizada quando outra pessoa aponta (a cada 60 s, se nada estiver aberto)
+  setInterval(function () {
+    if ((!pausa || pausa.hidden) && !document.querySelector(".op-concluir")) location.reload();
+  }, 60000);
+})();
+</script>
+{% endblock %}

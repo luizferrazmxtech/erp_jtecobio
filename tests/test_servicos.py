@@ -1,0 +1,242 @@
+import io
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+import pytest
+from django.contrib.auth.models import Group, User
+from django.core.exceptions import ValidationError
+from django.core.management import call_command
+from django.utils import timezone
+
+from apps.cadastros.models import Parceiro
+from apps.servicos import services
+from apps.servicos.models import Apontamento, OrdemServico, TipoRecipiente
+from apps.servicos.services import Fracao, fracionar
+
+SP = ZoneInfo("America/Sao_Paulo")
+D = Decimal
+
+
+def hora(h, m=0):
+    return datetime(2026, 11, 10, h, m, tzinfo=SP)
+
+
+# ---------------------------------------------------------------------------
+# Fracionamento
+# ---------------------------------------------------------------------------
+
+
+def test_um_tipo_so():
+    # 5.000 L de glicerina (6.300 kg) em tambores de 200 L (252 kg) = 25 tambores
+    f = [Fracao(D("252"), None)]
+    _, sobra = fracionar(D("6300"), f)
+    assert f[0].unidades == 25 and f[0].kg == D("6300") and f[0].parcial_kg == 0 and sobra == 0
+
+
+def test_maiores_primeiro_respeitando_o_que_o_cliente_trouxe():
+    ibc, tambor = Fracao(D("1260"), 3), Fracao(D("252"), None)
+    _, sobra = fracionar(D("5000"), [tambor, ibc])
+    assert ibc.unidades == 3 and ibc.kg == D("3780")
+    # 1.220 kg restantes: 4 tambores cheios (1.008) + 1 com 212 kg
+    assert tambor.unidades == 4 and tambor.parcial_kg == D("212") and tambor.kg == D("1220")
+    assert sobra == 0
+
+
+def test_sobra_quando_faltam_recipientes():
+    ibc = Fracao(D("1000"), 2)
+    _, sobra = fracionar(D("2500"), [ibc])
+    assert ibc.unidades == 2 and sobra == D("500")
+
+
+# ---------------------------------------------------------------------------
+# OS completa
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def os_kemin(db):
+    cliente = Parceiro.objects.create(razao_social="Kemin do Brasil Ltda", eh_cliente=True)
+    ibc = TipoRecipiente.objects.get(nome="IBC 1.000 L")  # da migração: 0,25/kg, 12 min
+    tambor = TipoRecipiente.objects.get(nome="Tambor 200 L")  # 0,30/kg, 4 min
+    os = OrdemServico.objects.create(data=date(2026, 11, 10), cliente=cliente, descricao_produto="EN-HANCEA 132B",
+                                     densidade=D("1.26"), quantidade_kg=D("5000"))
+    services.novo_item(os, ibc, 3).save()
+    services.novo_item(os, tambor).save()
+    services.recalcular(os)
+    return os
+
+
+@pytest.fixture
+def joao(db):
+    return User.objects.create_user("joao", password="x", first_name="João")
+
+
+@pytest.fixture
+def maria(db):
+    return User.objects.create_user("maria", password="x", first_name="Maria")
+
+
+def test_os_calcula_fracionamento_e_valor(os_kemin):
+    ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
+    assert ibc.unidades_previstas == 3 and ibc.kg_previsto == D("3780")
+    assert tambor.unidades_previstas == 4 and tambor.unidades_total_previstas == 5
+    # 3.780 × 0,25 + 1.220 × 0,30
+    assert os_kemin.valor_previsto == D("945.00") + D("366.00")
+    assert os_kemin.minutos_previstos == 3 * 12 + 5 * 4
+    assert os_kemin.numero == 1
+
+
+def test_apontamento_com_pausa_e_dois_funcionarios(os_kemin, joao, maria):
+    services.apontar(os_kemin, joao, "INICIO", momento=hora(8))
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.ANDAMENTO
+    services.apontar(os_kemin, maria, "INICIO", momento=hora(8, 30))
+    services.apontar(os_kemin, joao, "PAUSA", "REFEICAO", momento=hora(9))
+    with pytest.raises(ValidationError):  # pausado não pode pausar de novo
+        services.apontar(os_kemin, joao, "PAUSA", "OUTRO", momento=hora(9, 5))
+    services.apontar(os_kemin, joao, "RETOMADA", momento=hora(9, 15))
+    services.apontar(os_kemin, joao, "FIM", momento=hora(9, 45))
+    services.apontar(os_kemin, maria, "FIM", momento=hora(9, 30))
+
+    t = services.tempos(os_kemin)
+    assert t[joao.pk].trabalhado == 90 * 60 and t[joao.pk].parado == 15 * 60  # 60 + 30 min; 15 parado
+    assert t[maria.pk].trabalhado == 60 * 60
+    assert t[joao.pk].pausas[0][2] == "Refeição / café"
+
+    ind = services.indicadores(os_kemin)
+    assert ind.homem_min == D("150.0") and ind.duracao_min == D("105.0") and ind.funcionarios == 2
+
+
+def test_pausa_exige_motivo(os_kemin, joao):
+    services.apontar(os_kemin, joao, "INICIO", momento=hora(8))
+    with pytest.raises(ValidationError):
+        services.apontar(os_kemin, joao, "PAUSA", momento=hora(8, 10))
+
+
+def test_concluir_fecha_quem_ficou_aberto_e_calcula_tmo(os_kemin, joao, maria):
+    services.apontar(os_kemin, joao, "INICIO", momento=timezone.now() - timedelta(minutes=56))
+    services.apontar(os_kemin, maria, "INICIO", momento=timezone.now() - timedelta(minutes=10))
+    services.apontar(os_kemin, maria, "PAUSA", "CAMINHAO", momento=timezone.now() - timedelta(minutes=5))
+    ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
+    services.concluir(os_kemin, joao, {ibc.pk: (3, D("3780")), tambor.pk: (5, D("1220"))})
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.CONCLUIDA and os_kemin.kg_envasado == D("5000")
+    assert os_kemin.apontamentos.filter(evento="FIM").count() == 2
+    assert os_kemin.valor == D("1311.00")
+    assert os_kemin.impostos == D("147.49")  # 11,25% de 1.311
+    ind = services.indicadores(os_kemin)
+    assert ind.unidades == 8
+    assert ind.homem_min == D("61.0")  # 56 do João + 5 da Maria
+    assert ind.tmo_min == D("7.63")
+    assert ind.eficiencia == int(D("56") * 100 / D("61.0"))  # 3×12 + 5×4 = 56 min previstos
+
+    # Não aceita mais apontamento
+    with pytest.raises(ValidationError):
+        services.apontar(os_kemin, joao, "INICIO")
+
+    # TMO por tipo, repartido pelo tempo padrão: IBC leva 36/56 do tempo
+    real = services.tmo_do_tipo(ibc.tipo)
+    assert real["unidades"] == 3 and real["tmo"] == (D("61.0") * 36 / 56 / 3).quantize(D("0.01"), "ROUND_HALF_UP")
+
+    # Valor por mês para o painel
+    mes = timezone.localtime(os_kemin.concluida_em).strftime("%Y-%m")
+    assert services.valor_por_mes(date(2026, 1, 1))[mes] == D("1311.00")
+
+
+# ---------------------------------------------------------------------------
+# Telas
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def logado(client, db):
+    client.force_login(User.objects.create_superuser("luiz", "l@example.com", "senha-de-teste-123"))
+    return client
+
+
+def test_nova_os_pela_tela(logado, db):
+    cliente = Parceiro.objects.create(razao_social="Peter Cremer", eh_cliente=True)
+    ibc = TipoRecipiente.objects.get(nome="IBC 1.000 L")
+    resp = logado.post("/servicos/nova/", {
+        "data": "2026-11-10", "cliente": cliente.pk, "descricao_produto": "Glicerina do cliente",
+        "densidade": "1,26", "quantidade": "2000", "unidade_quantidade": "L",
+        "aliquota_iss": "2", "aliquota_pis": "1,65", "aliquota_cofins": "7,6",
+        "tipo_0": ibc.pk, "disponivel_0": "", "preco_0": "0,28", "tipo_1": "", "n_linhas": "2",
+    })
+    os = OrdemServico.objects.get()
+    assert resp.status_code == 302 and resp["Location"] == f"/servicos/{os.pk}/"
+    assert os.quantidade_kg == D("2520.000")
+    item = os.itens.get()
+    assert item.preco_kg == D("0.28") and item.unidades_previstas == 2 and item.parcial_kg == 0
+    pagina = logado.get(f"/servicos/{os.pk}/").content.decode()
+    assert "Peter Cremer" in pagina and "IBC 1.000 L" in pagina
+    assert logado.get("/servicos/").status_code == 200
+    assert logado.get("/servicos/nova/").status_code == 200
+    assert logado.get("/servicos/recipientes/").status_code == 200
+    assert logado.get(f"/servicos/{os.pk}/editar/").status_code == 200
+
+
+def test_nova_os_sem_recipiente_nao_salva(logado, db):
+    cliente = Parceiro.objects.create(razao_social="Peter Cremer", eh_cliente=True)
+    resp = logado.post("/servicos/nova/", {
+        "data": "2026-11-10", "cliente": cliente.pk, "descricao_produto": "X", "densidade": "1", "quantidade": "100",
+        "unidade_quantidade": "KG", "aliquota_iss": "2", "aliquota_pis": "1", "aliquota_cofins": "7", "tipo_0": "",
+        "n_linhas": "1",
+    })
+    assert resp.status_code == 200 and not OrdemServico.objects.exists()
+    assert "pelo menos um tipo" in resp.content.decode()
+
+
+def test_operador_aponta_e_conclui(client, os_kemin, joao):
+    call_command("criar_perfis", stdout=io.StringIO())
+    joao.groups.add(Group.objects.get(name="Operação"))
+    client.force_login(joao)
+    assert client.get("/")["Location"] == "/servicos/operador/"  # vai direto para o apontamento
+    assert "OS 1" in client.get("/servicos/operador/").content.decode()
+
+    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "INICIO"})
+    assert "Trabalhando" in client.get(f"/servicos/operador/{os_kemin.pk}/").content.decode()
+    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "PAUSA", "motivo": "REFEICAO"})
+    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "RETOMADA"})
+    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "FIM"})
+    assert list(os_kemin.apontamentos.values_list("evento", flat=True)) == ["INICIO", "PAUSA", "RETOMADA", "FIM"]
+    pagina = client.get(f"/servicos/operador/{os_kemin.pk}/").content.decode()
+    assert "Concluir OS" in pagina
+
+    ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
+    resp = client.post(f"/servicos/{os_kemin.pk}/concluir/", {
+        "voltar": "operador", f"unidades_{ibc.pk}": "3", f"kg_{ibc.pk}": "", f"unidades_{tambor.pk}": "5", f"kg_{tambor.pk}": "",
+    })
+    assert resp["Location"] == "/servicos/operador/"
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.CONCLUIDA
+    assert os_kemin.kg_envasado == D("5000")  # 3 IBC cheios + tambores limitados ao previsto
+
+    # Operador não edita nem fatura
+    assert client.post(f"/servicos/{os_kemin.pk}/faturar/").status_code == 403
+
+
+def test_faturar_e_correcao_pelo_escritorio(logado, os_kemin, joao):
+    agora = timezone.localtime()
+    resp = logado.post(f"/servicos/{os_kemin.pk}/corrigir/", {
+        "funcionario": joao.pk, "evento": "INICIO", "momento": (agora - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
+        "motivo": "", "observacao": "Esqueceu de apontar",
+    })
+    assert resp.status_code == 302
+    a = Apontamento.objects.get()
+    assert a.corrigido and a.funcionario == joao
+    ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
+    logado.post(f"/servicos/{os_kemin.pk}/concluir/", {f"unidades_{ibc.pk}": "3", f"kg_{ibc.pk}": "3780",
+                                                      f"unidades_{tambor.pk}": "5", f"kg_{tambor.pk}": "1220"})
+    logado.post(f"/servicos/{os_kemin.pk}/faturar/", {"nota": ""})
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.FATURADA
+    assert logado.get(f"/servicos/{os_kemin.pk}/").status_code == 200
+
+
+def test_cadastro_de_recipiente_pela_tela(logado, db):
+    resp = logado.post("/novo/recipiente/", {"nome": "Bombona 20 L", "capacidade": "20", "unidade": "L",
+                                             "preco_kg": "0,35", "tempo_padrao_min": "1", "ativo": "on"})
+    assert resp.status_code == 302
+    assert TipoRecipiente.objects.get(nome="Bombona 20 L").preco_kg == D("0.35")

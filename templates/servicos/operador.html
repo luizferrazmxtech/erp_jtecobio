@@ -1,0 +1,18 @@
+{% extends "servicos/_operador_base.html" %}{% load erp %}
+{% block conteudo %}
+<h1 class="op-titulo">Ordens de serviço abertas</h1>
+<p class="suave">Toque na OS para apontar início, pausas e fim.</p>
+<div class="op-lista">
+{% for c in cartoes %}{% with os=c.os %}
+  <a class="op-cartao {{ c.situacao }}" href="{% url 'servicos:operador_os' os.pk %}">
+    <div class="op-cab"><b>OS {{ os.numero }}</b>{% situacao c.situacao %}</div>
+    <div class="op-cliente">{{ os.cliente }}</div>
+    <div class="suave">{{ os.nome_produto }} · {{ os.quantidade_kg|kg }} kg{% if os.placa %} · placa {{ os.placa }}{% endif %}</div>
+    <div class="op-recip">{% for i in os.itens.all %}<span>{{ i.unidades_total_previstas }} × {{ i.tipo.nome }}</span>{% endfor %}</div>
+    {% if c.trabalhando %}<div class="pequeno">Trabalhando agora: {% for t in c.trabalhando %}{{ t.funcionario.get_full_name|default:t.funcionario.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+  </a>
+{% endwith %}{% empty %}
+  <div class="op-vazio">Nenhuma OS aberta agora. Quando o escritório abrir uma, ela aparece aqui.</div>
+{% endfor %}
+</div>
+{% endblock %}

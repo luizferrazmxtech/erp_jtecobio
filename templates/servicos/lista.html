@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Ordens de serviço{% endblock %}
+{% block icone_titulo %}{% icone "envase" %}{% endblock %}
+{% block titulo_pagina %}Ordens de serviço{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'servicos:lista' %}">Serviços</a> {% icone "direita" %} <b>Listar</b>{% endblock %}
+{% block conteudo %}
+<div class="indicadores ind-4">
+  <a class="cartao indicador" href="?status=ABERTA"><span class="icone escuro">{% icone "envase" %}</span>
+    <div><div class="rotulo">Abertas (não começaram)</div><div class="valor">{{ contagem.abertas }}</div></div></a>
+  <a class="cartao indicador" href="?status=ANDAMENTO"><span class="icone amarelo">{% icone "relogio" %}</span>
+    <div><div class="rotulo">Em andamento</div><div class="valor">{{ contagem.andamento }}</div></div></a>
+  <a class="cartao indicador" href="?status=CONCLUIDA"><span class="icone azul">{% icone "fiscal" %}</span>
+    <div><div class="rotulo">Concluídas a faturar</div><div class="valor">{{ contagem.a_faturar }}</div></div></a>
+  <div class="cartao indicador"><span class="icone">{% icone "grafico" %}</span>
+    <div><div class="rotulo">Serviço concluído no mês</div><div class="valor"><small>R$</small> {{ contagem.valor_mes|abreviado }}</div></div></div>
+</div>
+<div class="barra-acoes">
+  {% if perms.servicos.add_ordemservico %}<a class="botao" href="{% url 'servicos:nova' %}">{% icone "mais" %} Nova OS</a>{% endif %}
+  <a class="botao claro" href="{% url 'servicos:operador' %}">{% icone "relogio" %} Tela de apontamento</a>
+  <a class="botao claro" href="{% url 'servicos:recipientes' %}">{% icone "envase" %} Tipos de recipiente</a>
+</div>
+<form class="cartao filtros" method="get">
+  <div class="campos">
+    <div class="campo largo"><label>Cliente, nº da OS, produto, placa ou pedido</label><input name="busca" value="{{ request.GET.busca }}"></div>
+    <div class="campo"><label>Situação</label><select name="status"><option value="">Todas</option>{% for v, n in opcoes_status %}<option value="{{ v }}" {% if request.GET.status == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></div>
+    <div class="campo largo"><label>Data de abertura</label><div class="intervalo"><input type="date" name="de" value="{{ request.GET.de }}"><span class="suave">a</span><input type="date" name="ate" value="{{ request.GET.ate }}"></div></div>
+  </div>
+  <div class="botoes-filtro"><button class="botao">{% icone "ok" %} Buscar</button><a class="botao claro" href="?">{% icone "limpar" %} Limpar</a></div>
+</form>
+<div class="cartao">
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>Produto</th><th>Recipientes</th><th class="num">kg</th><th class="num">Valor (R$)</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for os in pagina %}
+      <tr><td><a class="forte" href="{{ os.get_absolute_url }}">{{ os.numero }}</a>{% if os.pedido_cliente %}<span class="sub">OC {{ os.pedido_cliente }}</span>{% endif %}</td>
+        <td><a class="forte" href="{% url 'web:parceiro' os.cliente_id %}">{{ os.cliente.razao_social|truncatechars:38 }}</a>{% if os.placa %}<span class="sub">placa {{ os.placa }}</span>{% endif %}</td>
+        <td class="nowrap">{{ os.data|date:"d/m/Y" }}</td>
+        <td>{{ os.nome_produto|truncatechars:30 }}</td>
+        <td>{% for i in os.itens.all %}{% if os.concluida %}{{ i.unidades_cheias|default:0 }}{% else %}{{ i.unidades_total_previstas }}{% endif %} × {{ i.tipo.nome }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+        <td class="num">{% if os.kg_envasado %}{{ os.kg_envasado|kg }}{% else %}{{ os.quantidade_kg|kg }}{% endif %}</td>
+        <td class="num">{{ os.valor|brl }}{% if not os.concluida %}<span class="sub">previsto</span>{% endif %}</td>
+        <td>{% situacao os.status %}</td>
+        <td class="acoes"><span class="acoes-linha"><a class="acao" title="Ver" href="{{ os.get_absolute_url }}">{% icone "buscar" %}</a>{% if os.em_aberto %}<a class="acao" title="Apontar" href="{% url 'servicos:operador_os' os.pk %}">{% icone "relogio" %}</a>{% endif %}</span></td></tr>
+    {% empty %}<tr><td colspan="9" class="vazio">Nenhuma ordem de serviço encontrada.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% include "web/_paginacao.html" %}
+</div>
+{% endblock %}

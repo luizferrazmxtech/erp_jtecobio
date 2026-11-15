@@ -522,3 +522,15 @@ a.cilindro-grande { display: block; }
 .areas-usuario .area small { color: var(--suave); font-size: 12.5px; }
 .areas-usuario.desligado { opacity: .45; pointer-events: none; }
 .secao > p.erro { color: var(--vermelho); font-size: 12.5px; margin-top: 8px; }
+
+/* Ordens de serviço */
+.indicadores.ind-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+a.indicador { color: inherit; }
+a.indicador:hover { text-decoration: none; border-color: var(--borda-forte); }
+.tabela.fracionamento select { min-width: 190px; }
+.valor-calc { font-size: 18px; padding-top: 6px; }
+.secao-correcao { padding: 12px 16px; border-top: 1px solid var(--borda); }
+.secao-correcao summary { list-style: none; display: inline-flex; }
+.secao-correcao summary::-webkit-details-marker { display: none; }
+@media (max-width: 900px) { .indicadores.ind-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.aviso[hidden] { display: none; }
