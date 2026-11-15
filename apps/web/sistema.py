@@ -20,6 +20,7 @@ Usuario = get_user_model()
 # excluir ali; ver as telas, qualquer usuário ativo pode.
 AREAS = {
     "vendas": ("Vendas", "Pedidos, tanques de cada pedido e tabela de frete", ["vendas"]),
+    "servicos": ("Ordens de serviço", "OS de envase, tipos de recipiente, conclusão e faturamento", ["servicos"]),
     "estoque": ("Estoque", "Entradas, saídas, transferências e ajustes de inventário", ["estoque"]),
     "contratos": ("Contratos", "Contratos de compra e venda e ligação das notas", ["contratos"]),
     "cadastros": ("Cadastros", "Clientes, fornecedores, produtos, locais e tanques", ["cadastros"]),

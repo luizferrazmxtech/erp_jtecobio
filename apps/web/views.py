@@ -26,6 +26,8 @@ from apps.estoque import services as estoque
 from apps.estoque.models import Movimentacao
 from apps.fiscal.models import NotaFiscal, NotaItem
 from apps.vendas import services as vendas
+from apps.servicos.forms import TipoRecipienteForm
+from apps.servicos.models import TipoRecipiente
 from apps.vendas.models import Pedido, TabelaFrete
 
 ZERO = Decimal("0")
@@ -228,6 +230,10 @@ def _saldo_contratos(tipo):
 
 @login_required
 def painel(request):
+    from apps.servicos.views import so_operacao
+
+    if so_operacao(request.user):  # funcionário do envase vai direto para o apontamento
+        return redirect("servicos:operador")
     hoje = timezone.localdate()
     tanques = tanques_com_saldo()
     venda_abertos, venda_total = _saldo_contratos(Contrato.Tipo.VENDA)
@@ -635,6 +641,7 @@ CADASTROS = {
     "tanque": (Tanque, TanqueForm, "cadastros", "tanque", "tanque", "web:locais"),
     "frete": (TabelaFrete, FreteForm, "vendas", "frete", "frete", "web:fretes"),
     "contrato": (Contrato, ContratoForm, "contratos", "contrato", "contratos", "web:contratos"),
+    "recipiente": (TipoRecipiente, TipoRecipienteForm, "servicos", "recipiente", "envase", "servicos:recipientes"),
 }
 
 SECOES = {
@@ -642,6 +649,7 @@ SECOES = {
               ("Já cadastre o", "tanque", "Opcional. Um tanque por produto em cada local; outros podem ser adicionados depois.", ["tanque_produto", "tanque_capacidade", "tanque_identificacao"])],
     "parceiro": [("Preencha os", "dados gerais", "Nome, documento e cidade.", ["razao_social", "nome_fantasia", "documento", "inscricao_estadual", "cidade", "uf", "ativo"]),
                  ("Marque os", "papéis", "Uma mesma empresa pode ser cliente e fornecedora, por exemplo.", ["eh_cliente", "eh_fornecedor", "eh_transportadora", "eh_industrializador", "eh_armazem"])],
+    "recipiente": [("Preencha os", "dados do recipiente", "Quanto cabe em cada um, o preço do serviço por kg e o tempo para encher um.", ["nome", "capacidade", "unidade", "preco_kg", "tempo_padrao_min", "ativo"])],
     "contrato": [("Preencha os", "dados do contrato", "Quem, o quê e quando.", ["tipo", "numero", "parceiro", "produto", "modalidade", "mes_referencia", "status"]),
                  ("Informe", "quantidades e preços", "O saldo é calculado: contratado − entregue antes − notas ligadas.", ["quantidade_kg", "preco_unitario", "frete_previsto", "entregue_antes"]),
                  ("Adicione", "observações", "", ["observacao"])],

@@ -107,6 +107,11 @@ ICONES = {
     "inicio": "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
     "voltar": "M19 12H5 M12 19l-7-7 7-7",
     "pontos": "M12 6h.01 M12 12h.01 M12 18h.01",
+    "envase": "M9 3h6 M10 3v3l-4 4v9a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-9l-4-4V3 M6 13h12",
+    "relogio": "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 6v6l4 2",
+    "play": "M7 4v16l13-8z",
+    "pausa": "M7 4h3v16H7z M14 4h3v16h-3z",
+    "parar": "M5 5h14v14H5z",
 }
 
 
@@ -147,6 +152,12 @@ SITUACOES = {
     "CANC": ("Cancelado", "vermelho"),
     # contratos
     "ABERTO": ("Aberto", "azul"), "FINAL": ("Finalizado", "verde"), "CANCEL": ("Cancelado", "vermelho"),
+    # ordens de serviço
+    "ABERTA": ("Aberta", "cinza"), "ANDAMENTO": ("Em andamento", "amarelo"), "CONCLUIDA": ("Concluída", "azul"),
+    "FATURADA": ("Faturada", "verde"), "CANCELADA": ("Cancelada", "vermelho"),
+    # funcionário na OS
+    "trabalhando": ("Trabalhando", "verde"), "pausado": ("Pausado", "amarelo"), "finalizado": ("Finalizou", "azul"),
+    "livre": ("Não iniciou", "cinza"),
 }
 
 
@@ -172,6 +183,29 @@ def chave(dicionario, k):
         return dicionario.get(k)
     except AttributeError:
         return None
+
+
+@register.filter
+def duracao(minutos):
+    """95 → '1h35'; 12,5 → '12 min'; vazio → '—'."""
+    try:
+        m = float(minutos or 0)
+    except (TypeError, ValueError):
+        return "—"
+    if m <= 0:
+        return "—"
+    if m < 1:
+        return f"{int(round(m * 60))} s"
+    h, resto = divmod(int(round(m)), 60)
+    return f"{h}h{resto:02d}" if h else f"{resto} min"
+
+
+@register.filter
+def duracao_seg(segundos):
+    try:
+        return duracao(float(segundos or 0) / 60)
+    except (TypeError, ValueError):
+        return "—"
 
 
 @register.filter

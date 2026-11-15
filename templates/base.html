@@ -63,6 +63,16 @@
     </div>
   </details>
 
+  <details {% if '/servicos/' in request.path %}open{% endif %}>
+    <summary>{% icone "envase" %} Serviços {% icone "baixo" "ic seta" %}</summary>
+    <div class="sub">
+      <a class="{% if request.path == '/servicos/' or '/servicos/' in request.path and '/operador' not in request.path and '/recipientes' not in request.path and '/nova' not in request.path %}ativo{% endif %}" href="{% url 'servicos:lista' %}">{% icone "envase" %} Ordens de serviço</a>
+      <a class="{% ativo '/servicos/nova' %}" href="{% url 'servicos:nova' %}">{% icone "mais" %} Nova OS</a>
+      <a class="{% ativo '/servicos/operador' %}" href="{% url 'servicos:operador' %}">{% icone "relogio" %} Apontamento</a>
+      <a class="{% ativo '/servicos/recipientes' %}" href="{% url 'servicos:recipientes' %}">{% icone "envase" %} Tipos de recipiente</a>
+    </div>
+  </details>
+
   <details {% if '/contratos/' in request.path %}open{% endif %}>
     <summary>{% icone "contratos" %} Contratos {% icone "baixo" "ic seta" %}</summary>
     <div class="sub">

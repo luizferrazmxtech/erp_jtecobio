@@ -1,0 +1,27 @@
+{% load static erp %}<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Apontamento{% endblock %} · JT Ecobio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/operador.css' %}">
+</head>
+<body class="operador">
+<header class="op-topo">
+  <a class="marca" href="{% url 'servicos:operador' %}"><span class="gota">{% icone "gota" %}</span><span>jt<b>ecobio</b></span></a>
+  <span class="espaco"></span>
+  {% if not so_operacao %}<a class="op-voltar" href="{% url 'servicos:lista' %}">{% icone "voltar" %} Sistema</a>{% endif %}
+  <span class="op-nome">{{ user.get_full_name|default:user.get_username }}</span>
+  <form method="post" action="{% url 'sair' %}">{% csrf_token %}<button class="sair" title="Sair">{% icone "sair" %}</button></form>
+</header>
+<main class="op-conteudo">
+  {% for m in messages %}<div class="aviso {{ m.tags }}">{% if m.tags == 'error' %}{% icone "alerta" %}{% else %}{% icone "ok" %}{% endif %}<div>{{ m }}</div></div>{% endfor %}
+  {% block conteudo %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

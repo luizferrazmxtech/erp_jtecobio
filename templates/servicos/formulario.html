@@ -1,0 +1,76 @@
+{% extends "base.html" %}{% load static erp l10n %}
+{% block titulo %}{{ titulo }}{% endblock %}
+{% block icone_titulo %}{% icone "envase" %}{% endblock %}
+{% block titulo_pagina %}{{ titulo }}{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'servicos:lista' %}">Serviços</a> {% icone "direita" %} <b>{% if os %}Editar{% else %}Nova OS{% endif %}</b>{% endblock %}
+{% block conteudo %}
+<form method="post" class="cartao formulario" id="form-os">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="secao">{% for e in form.non_field_errors %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}</div>{% endif %}
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Quem e <b>o quê</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">O cliente manda o caminhão com o produto e os recipientes dele; a JT enche e cobra por kg.</p>
+    <div class="campos">
+      {% with campo=form.cliente %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.data %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.produto %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.descricao_produto %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.quantidade %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.unidade_quantidade %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.densidade %}{% include "web/_campo.html" %}{% endwith %}
+      <div class="campo"><label>Em kg</label><b id="f-kg" class="valor-calc">—</b></div>
+    </div>
+  </div>
+
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Recipientes que o cliente <b>trouxe</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">O sistema enche primeiro os maiores (menos recipientes = menos tempo) e respeita quantos o cliente trouxe de cada tipo. O que sobra vai num recipiente incompleto. O preço vem do cadastro e pode ser mudado só nesta OS. Falta um tipo? <a href="{% url 'web:adicionar' 'recipiente' %}">Cadastre um novo recipiente</a>.</p>
+    {% for e in erros_recip %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}
+    {% localize off %}
+    <div class="tabela-caixa"><table class="tabela fracionamento" id="recipientes">
+      <thead><tr><th>Tipo de recipiente</th><th class="num">Quantos trouxe</th><th class="num">Preço (R$/kg)</th><th class="num">Enche</th><th class="num">kg</th><th class="num">Valor (R$)</th><th class="num">Tempo previsto</th><th></th></tr></thead>
+      <tbody>
+      {% for l in linhas %}
+        <tr class="linha-recip">
+          <td><select name="tipo_{{ forloop.counter0 }}" class="r-tipo"><option value="">—</option>{% for t in tipos %}<option value="{{ t.pk }}" data-cap="{{ t.capacidade }}" data-un="{{ t.unidade }}" data-preco="{{ t.preco_kg }}" data-tempo="{{ t.tempo_padrao_min }}" {% if l.tipo == t.pk|stringformat:"s" %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}</select></td>
+          <td class="num"><input name="disponivel_{{ forloop.counter0 }}" class="r-disp" value="{{ l.disponivel }}" inputmode="numeric" placeholder="sem limite" style="width:110px"></td>
+          <td class="num"><input name="preco_{{ forloop.counter0 }}" class="r-preco" value="{{ l.preco }}" inputmode="decimal" placeholder="do cadastro" style="width:110px"></td>
+          <td class="num r-un">—</td><td class="num r-kg">—</td><td class="num r-valor">—</td><td class="num r-tempo">—</td>
+          <td><button type="button" class="acao r-tirar" title="Tirar esta linha">{% icone "fechar" %}</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><th><button type="button" class="botao claro pequeno" id="mais-linha">{% icone "mais" %} Outro tipo</button></th><th></th><th></th>
+        <th class="num" id="t-un">—</th><th class="num" id="t-kg">—</th><th class="num" id="t-valor">—</th><th class="num" id="t-tempo">—</th><th></th></tr></tfoot>
+    </table></div>
+    <input type="hidden" name="n_linhas" id="n-linhas" value="{{ linhas|length }}">
+    <div class="aviso" id="f-sobra" hidden>{% icone "alerta" %}<div><b id="f-sobra-kg"></b> kg não cabem nos recipientes informados. Aumente a quantidade trazida ou inclua outro tipo.</div></div>
+    {% endlocalize %}
+  </div>
+
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Dados do <b>caminhão e do pedido</b></h3>
+    <div class="campos">
+      {% with campo=form.placa %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.nf_cliente %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.pedido_cliente %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.lote %}{% include "web/_campo.html" %}{% endwith %}
+    </div>
+  </div>
+
+  <div class="secao">
+    <h3 style="font-weight:300;font-size:18px">Impostos do <b>serviço</b></h3>
+    <p class="suave pequeno" style="margin:2px 0 14px">Como na planilha: ISS 2%, PIS 1,65% e COFINS 7,6% sobre o valor do serviço.</p>
+    <div class="campos">
+      {% with campo=form.aliquota_iss %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.aliquota_pis %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.aliquota_cofins %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.observacao %}{% include "web/_campo.html" %}{% endwith %}
+    </div>
+  </div>
+  <div class="rodape">
+    <a class="botao claro" href="{% if os %}{{ os.get_absolute_url }}{% else %}{% url 'servicos:lista' %}{% endif %}">Cancelar</a>
+    <button class="botao">{% if os %}Salvar alterações{% else %}Abrir OS{% endif %}</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}{{ densidades|json_script:"densidades" }}<script src="{% static 'js/fracionamento.js' %}"></script>{% endblock %}

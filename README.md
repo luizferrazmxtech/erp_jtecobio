@@ -16,6 +16,7 @@ Feito em **Python + Django** com banco **PostgreSQL**.
 | Integração | Importa do backup do ERP antigo clientes, fornecedores, transportadoras, produtos e todas as notas (entrada, saída e CT-e). Carrega saldos por tanque e contratos da planilha DRE do mês | `apps/integracao` |
 | Telas | Painel, estoque, vendas, contratos, notas e cadastros, no estilo do Gestão Click | `apps/web`, `templates/`, `static/css/app.css` |
 | Perfis | Grupos Diretoria, Comercial, Logística e Financeiro | `apps/cadastros/management/commands/criar_perfis.py` |
+| Ordens de serviço | Envase para clientes: tipos de recipiente (capacidade, preço por kg, tempo padrão), OS com cálculo do fracionamento, apontamento de início, pausas e fim por funcionário, TMO real × tempo padrão, conclusão e faturamento | `apps/servicos` |
 | Vendas (fase 2) | Pedido de venda atendido por vários tanques, tabela de frete, sugestão da combinação mais barata (produto + frete), reserva, faturamento com baixa no estoque e margem | `apps/vendas` |
 
 Telas (menu lateral):
@@ -24,6 +25,7 @@ Telas (menu lateral):
 - **Cadastros**: clientes, fornecedores, transportadoras, produtos, locais e tanques (listar, ver, adicionar e editar).
 - **Estoque**: saldos por tanque, movimentações com filtros, entrada, saída, transferência e ajuste.
 - **Vendas**: pedidos (novo, escolha dos tanques, confirmar, faturar) e tabela de frete.
+- **Serviços**: ordens de serviço de envase (lista, nova OS, detalhe com mão de obra e TMO), tela de apontamento para o celular (`/servicos/operador/`) e tipos de recipiente.
 - **Contratos**: compra e venda com saldo e percentual entregue.
 - **Fiscal**: notas de saída, de entrada e CT-e importados do ERP antigo.
 - **Administração** (`/admin/`): continua disponível para o que ainda não tem tela própria.
@@ -145,3 +147,15 @@ Os testes usam SQLite e não precisam do banco antigo.
 1. Ligar as notas novas aos contratos automaticamente (pelo número do pedido do cliente que vem na nota) e dar baixa no tanque certo.
 2. Industrialização, fracionamento e serviços (envase, transbordo, armazenagem).
 3. Financeiro e DRE automática.
+
+## Ordens de serviço de envase
+
+O cliente manda o caminhão com o produto e os recipientes dele; a JT enche e cobra por kg envasado.
+
+1. **Tipos de recipiente** (Serviços → Tipos de recipiente): capacidade em litros ou kg, preço do serviço por kg e **tempo padrão** para encher um recipiente. Vêm cadastrados flexitank, IBC, octabin, tambor e bombona com os preços da planilha; os tempos padrão iniciais são estimativas, ajuste-os.
+2. **Nova OS**: cliente, produto, quantidade (kg ou litros) e quantos recipientes de cada tipo o cliente trouxe. O sistema calcula na hora quantos de cada tipo enche (maiores primeiro), o valor e o tempo previsto.
+3. **Apontamento** (`/servicos/operador/`, no celular ou tablet): o funcionário toca em Iniciar, Pausar (com o motivo), Retomar e Finalizar. A hora é sempre a do sistema. Cada funcionário tem o próprio relógio; dois na mesma OS somam a mão de obra. Quem termina por último informa quantos recipientes encheu e conclui a OS.
+4. **TMO**: minutos de mão de obra ÷ recipientes. A OS mostra o TMO, o tempo previsto pelo padrão e a eficiência. Na tela de tipos de recipiente aparece o TMO real médio das últimas 10 OS e um botão para usá-lo como novo padrão.
+5. **Faturar**: liga a OS à nota de prestação de serviço importada do sistema emissor (ou marca como faturada sem nota).
+
+Funcionários do envase: crie o usuário em Sistema → Usuários e marque só o perfil **Operação** (rode `python manage.py criar_perfis` uma vez para ele existir). Ao entrar, eles vão direto para a tela de apontamento. Se alguém esquecer de apontar, o supervisor lança a correção no detalhe da OS (fica marcada como correção).

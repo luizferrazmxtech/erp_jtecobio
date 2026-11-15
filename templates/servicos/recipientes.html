@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Tipos de recipiente{% endblock %}
+{% block icone_titulo %}{% icone "envase" %}{% endblock %}
+{% block titulo_pagina %}Tipos de recipiente{% endblock %}
+{% block trilha %}{% icone "direita" %} <a href="{% url 'servicos:lista' %}">Serviços</a> {% icone "direita" %} <b>Recipientes</b>{% endblock %}
+{% block conteudo %}
+<div class="barra-acoes">
+  {% if perms.servicos.add_tiporecipiente %}<a class="botao" href="{% url 'web:adicionar' 'recipiente' %}">{% icone "mais" %} Adicionar</a>{% endif %}
+</div>
+<div class="cartao">
+  <div class="titulo"><div><h2>{% icone "envase" %} Recipientes e <b>tempo padrão</b></h2>
+    <p>O tempo padrão é quanto se leva para encher UM recipiente; com ele a OS prevê a duração. O TMO real é a média das últimas 10 OS concluídas com esse tipo (quando a OS teve mais de um tipo, o tempo é repartido na proporção do padrão). Quando o real se firmar, clique em <b>Usar como padrão</b>.</p></div></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Recipiente</th><th class="num">Capacidade</th><th class="num">Preço (R$/kg)</th><th class="num">Tempo padrão</th><th class="num">TMO real</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <tbody>{% for l in linhas %}{% with t=l.t %}
+      <tr><td><b>{{ t.nome }}</b></td><td class="num">{{ t.capacidade|kg }} {{ t.get_unidade_display }}</td>
+        <td class="num">{{ t.preco_kg|num:4 }}</td><td class="num">{{ t.tempo_padrao_min|num:1 }} min</td>
+        <td class="num">{% if l.real %}<b>{{ l.real.tmo|num:1 }} min</b><span class="sub">{{ l.real.unidades }} recip. em {{ l.real.ordens }} OS</span>{% else %}<span class="suave">sem OS concluída</span>{% endif %}</td>
+        <td>{% if t.ativo %}<span class="etiqueta verde">Ativo</span>{% else %}<span class="etiqueta cinza">Inativo</span>{% endif %}</td>
+        <td class="acoes"><span class="acoes-linha">
+          {% if pode %}<a class="acao" title="Editar" href="{% url 'web:editar' 'recipiente' t.pk %}">{% icone "editar" %}</a>
+          {% if l.real and l.real.tmo != t.tempo_padrao_min %}<form method="post" action="{% url 'servicos:usar_tmo' t.pk %}">{% csrf_token %}<button class="botao claro pequeno" title="Trocar o tempo padrão pelo TMO real">Usar como padrão</button></form>{% endif %}{% endif %}
+        </span></td></tr>
+    {% endwith %}{% empty %}<tr><td colspan="7" class="vazio">Nenhum recipiente cadastrado.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}
