@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load erp l10n %}
+{% extends "base.html" %}{% load static erp l10n %}
 {% block titulo %}Pedido {{ pedido.numero }}{% endblock %}
 {% block icone_titulo %}{% icone "vendas" %}{% endblock %}
 {% block titulo_pagina %}Pedido de venda {{ pedido.numero }}{% endblock %}
@@ -38,29 +38,73 @@
 </div>
 
 {% if pedido.editavel %}
-<div class="cartao mb">
-  <div class="titulo"><div><h2>{% icone "tanque" %} De quais <b>tanques</b> sai</h2><p>Tanques com saldo livre, do menor para o maior custo até o destino. Preencha quanto sai de cada um; o frete vem da tabela e pode ser alterado.</p></div>
-    <form method="post" action="{% url 'vendas:sugerir' pedido.pk %}" style="display:flex;gap:8px;align-items:center">{% csrf_token %}
-      <label class="pequeno suave nowrap" for="minimo">Mínimo por tanque (kg)</label><input id="minimo" name="minimo" value="0" style="width:100px;height:32px" inputmode="decimal">
-      <button class="botao claro pequeno">Sugerir a mais barata</button></form></div>
-  <form method="post" action="{% url 'vendas:salvar_origens' pedido.pk %}">{% csrf_token %}
-  <div class="tabela-caixa"><table class="tabela">
-    <thead><tr><th>Tanque</th><th>Lote</th><th class="num">Saldo livre (kg)</th><th class="num">Custo (R$/kg)</th><th class="num">Frete (R$/kg)</th><th class="num">Total (R$/kg)</th><th class="num">Sair (kg)</th></tr></thead>
-    <tbody>{% for l in linhas %}
-      <tr>
-        <td><b>{{ l.opcao.local }}</b><input type="hidden" name="local_{{ forloop.counter0 }}" value="{{ l.opcao.local.pk }}"><input type="hidden" name="lote_{{ forloop.counter0 }}" value="{{ l.opcao.lote.pk|default:'' }}">{% if forloop.first %}<span class="sub">mais barato</span>{% endif %}</td>
-        <td>{{ l.opcao.lote.codigo|default:"—" }}</td>
-        <td class="num">{{ l.opcao.livre|kg }}</td>
-        <td class="num">{{ l.opcao.custo_kg|num:4 }}</td>
-        <td class="num"><input name="frete_{{ forloop.counter0 }}" value="{{ l.frete|default_if_none:''|unlocalize }}" placeholder="sem tabela" inputmode="decimal" style="max-width:110px"></td>
-        <td class="num">{% if l.opcao.custo_total_kg is not None %}<b>{{ l.opcao.custo_total_kg|num:4 }}</b>{% else %}<span class="suave">sem frete</span>{% endif %}</td>
-        <td class="num"><input name="qtd_{{ forloop.counter0 }}" value="{{ l.quantidade|unlocalize }}" inputmode="decimal"></td>
-      </tr>
-    {% empty %}<tr><td colspan="7" class="vazio">Nenhum tanque com saldo livre deste produto.</td></tr>{% endfor %}</tbody>
-  </table></div>
-  <div class="rodape-tabela"><span>Pedido de {{ pedido.quantidade_kg|kg }} kg · alocado {{ pedido.quantidade_alocada|kg }} kg</span><button class="botao">{% icone "ok" %} Salvar tanques</button></div>
-  </form>
-</div>
+{% localize off %}
+<form method="post" action="{% url 'vendas:salvar_origens' pedido.pk %}" class="cartao mb escolha-rota" id="escolha-rota"
+      data-pedido="{{ pedido.quantidade_kg }}" data-preco="{{ pedido.preco_unitario }}" data-destino="{{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}">{% csrf_token %}
+  <div class="titulo">
+    <div><h2>{% icone "tanque" %} De quais <b>tanques</b> sai</h2>
+      <p>Cada tanque mostra o custo do produto, o frete até {{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }} e o custo efetivo (os dois somados). A rota sugerida usa os tanques de menor custo efetivo até completar o pedido. Clique num tanque para usar ou tirar, ou digite quanto sai.</p></div>
+    <div class="acoes-rota">
+      <label class="pequeno suave nowrap" for="minimo" title="Não vale mandar caminhão buscar pouco: tanques que dariam menos que isso ficam fora da sugestão.">Mínimo por tanque (kg)</label>
+      <input id="minimo" value="0" inputmode="decimal" style="width:90px;height:32px">
+      <button type="button" class="botao claro pequeno" id="usar-sugestao">{% icone "ok" %} Usar rota sugerida</button>
+      <button type="button" class="botao claro pequeno" id="zerar-tudo">{% icone "fechar" %} Zerar</button>
+    </div>
+  </div>
+
+  <div class="placar">
+    <div class="alocacao">
+      <div class="rotulo-placar"><span>Alocado</span><b><span id="p-alocado">0</span> de {{ pedido.quantidade_kg|kg }} kg</b></div>
+      <div class="barra"><div id="p-barra"></div></div>
+      <span class="pequeno" id="p-falta"></span>
+    </div>
+    <div><span>Custo efetivo médio</span><b>R$ <span id="p-medio">—</span>/kg</b></div>
+    <div><span>Custo produto + frete</span><b>R$ <span id="p-custo">—</span></b></div>
+    <div><span>Margem antes de impostos</span><b id="p-margem-b">R$ <span id="p-margem">—</span></b><span class="pequeno suave">R$ <span id="p-margem-kg">—</span>/kg</span></div>
+  </div>
+
+  <div class="corpo">
+    <div class="rota" id="rota" aria-hidden="true"><svg id="rota-svg"></svg></div>
+    <div class="origens">
+    {% for l in linhas %}
+      <div class="origem{% if l.opcao.frete is None %} sem-frete{% endif %}" data-i="{{ forloop.counter0 }}"
+           data-livre="{{ l.opcao.livre }}" data-saldo="{{ l.saldo }}" data-capacidade="{{ l.capacidade }}"
+           data-custo="{{ l.opcao.custo_kg }}" data-sugerido="{{ l.sugerido }}" data-nome="{{ l.opcao.local.nome }}">
+        <input type="hidden" name="local_{{ forloop.counter0 }}" value="{{ l.opcao.local.pk }}">
+        <input type="hidden" name="lote_{{ forloop.counter0 }}" value="{{ l.opcao.lote.pk|default:'' }}">
+        <div class="cab-origem">
+          <span class="posicao" title="Posição no ranking de custo efetivo"></span>
+          <div><b>{{ l.opcao.local.nome }}</b><span class="sub">{% if l.opcao.lote %}lote {{ l.opcao.lote.codigo }} · {% endif %}{{ l.opcao.local.get_tipo_display|default:"" }}</span></div>
+          <span class="selo-sugerido">Sugerido</span>
+        </div>
+        <div class="miolo-origem">
+          <button type="button" class="cilindro-grande {{ classe_nivel }}" title="Clique para usar ou tirar este tanque">
+            <span class="nivel-livre"></span><span class="nivel-sai"></span><span class="nivel-reservado"></span>
+            <span class="rotulo-sai"></span>
+          </button>
+          <dl class="custos">
+            <div><dt>Produto</dt><dd>R$ {{ l.opcao.custo_kg|num:4 }}</dd></div>
+            <div><dt>Frete <span class="seta-frete">→ {{ pedido.destino_uf }}</span></dt>
+              <dd><input class="frete" name="frete_{{ forloop.counter0 }}" value="{% if l.frete is not None %}{{ l.frete|num:4 }}{% endif %}" placeholder="sem tabela" inputmode="decimal" title="Frete por kg; vem da tabela de frete e pode ser alterado"></dd></div>
+            <div class="efetivo"><dt>Custo efetivo</dt><dd>R$ <span class="v-efetivo">—</span></dd></div>
+            <div class="sobra"><dt>Sobra por kg</dt><dd>R$ <span class="v-sobra">—</span></dd></div>
+          </dl>
+        </div>
+        <div class="pe-origem">
+          <span class="pequeno suave">Livre <b>{{ l.opcao.livre|kg }}</b> kg{% if l.saldo != l.opcao.livre %} · {{ l.saldo|kg }} no tanque{% endif %}</span>
+          <label class="sair">Sai <input class="qtd" name="qtd_{{ forloop.counter0 }}" value="{% if l.quantidade %}{{ l.quantidade|num:3 }}{% endif %}" inputmode="decimal" placeholder="0"> kg</label>
+        </div>
+        <input type="range" class="deslizar" min="0" max="{{ l.opcao.livre }}" step="100" value="0" aria-label="Quanto sai de {{ l.opcao.local.nome }}">
+      </div>
+    {% empty %}
+      <p class="vazio">Nenhum tanque com saldo livre de {{ pedido.produto }}.</p>
+    {% endfor %}
+    </div>
+  </div>
+  <div class="rodape-tabela"><span id="p-resumo-rodape">Pedido de {{ pedido.quantidade_kg|kg }} kg</span><button class="botao">{% icone "ok" %} Salvar tanques</button></div>
+</form>
+{% endlocalize %}
+<script src="{% static 'js/rota.js' %}"></script>
 {% else %}
 <div class="cartao mb">
   <div class="titulo"><div><h2>{% icone "tanque" %} <b>Tanques</b> do pedido</h2>{% if pedido.status == "CONF" %}<p>Quantidades reservadas: não podem ser vendidas em outro pedido.</p>{% endif %}</div></div>
