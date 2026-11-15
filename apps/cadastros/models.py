@@ -33,6 +33,10 @@ class Produto(models.Model):
     )
     ncm = models.CharField("NCM", max_length=10, blank=True)
     controla_estoque = models.BooleanField(default=True)
+    icms_compra = models.DecimalField(
+        "ICMS na compra (%)", max_digits=5, decimal_places=2, default=12,
+        help_text="ICMS que a JT credita na compra; tira o imposto do custo (custo net). Glicerina: 12; etanol: 18.",
+    )
     ativo = models.BooleanField(default=True)
     codigo_legado = models.CharField(
         "código no ERP antigo", max_length=30, blank=True, db_index=True,

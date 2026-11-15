@@ -4,7 +4,13 @@
    enquanto você mexe, mas só valem depois de "Salvar tanques" (o servidor
    confere tudo de novo). A sugestão segue a mesma regra do servidor
    (apps/vendas/services.py, sugerir_origens): pega do tanque de menor custo
-   efetivo (produto + frete) até completar o pedido.
+   efetivo NET (produto + frete, sem os impostos que voltam como crédito)
+   até completar o pedido.
+
+   Custo net, como na planilha DRE (apps/vendas/impostos.py):
+     produto net = custo × fator de compra   (ICMS 12% + PIS/COFINS → 0,7986)
+     frete net   = frete × 0,88              (crédito de ICMS do CT-e)
+     preço net   = preço × fator de venda    (ICMS 18% em SP → 0,74415)
 */
 (function () {
   var form = document.getElementById("escolha-rota");
@@ -12,6 +18,10 @@
 
   var pedidoKg = Number(form.dataset.pedido);
   var preco = Number(form.dataset.preco);
+  var fatorVenda = Number(form.dataset.fatorVenda) || 1;
+  var fatorCompra = Number(form.dataset.fatorCompra) || 1;
+  var fatorFrete = Number(form.dataset.fatorFrete) || 1;
+  var precoNet = preco * fatorVenda;
   var cartoes = Array.prototype.slice.call(form.querySelectorAll(".origem"));
   var svg = document.getElementById("rota-svg");
 
@@ -27,6 +37,10 @@
   }
   function fmt(n, casas) {
     return n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  }
+  // Números nos campos no jeito brasileiro: 43.954,5 e 0,0900.
+  function paraCampo(n, minimo, maximo) {
+    return n.toLocaleString("pt-BR", { minimumFractionDigits: minimo, maximumFractionDigits: maximo });
   }
 
   // ---------- dados de cada tanque ----------
@@ -48,14 +62,21 @@
 
   function freteDe(t) { return ler(t.frete.value); }
   function efetivoDe(t) { var f = freteDe(t); return f === null ? null : t.custo + f; }
+  function efetivoNetDe(t) { var f = freteDe(t); return f === null ? null : t.custo * fatorCompra + f * fatorFrete; }
   function qtdDe(t) { return Math.max(0, ler(t.qtd.value) || 0); }
 
-  // Ordem: com frete primeiro, do menor custo efetivo para o maior; empate → mais saldo.
+  // Quanto este tanque ainda pode mandar sem passar do pedido.
+  function limiteDe(t) {
+    var outros = tanques.reduce(function (s, o) { return o === t ? s : s + qtdDe(o); }, 0);
+    return Math.max(0, Math.min(t.livre, pedidoKg - outros));
+  }
+
+  // Ordem: com frete primeiro, do menor custo efetivo net para o maior; empate → mais saldo.
   function ranking() {
     return tanques.slice().sort(function (a, b) {
-      var ea = efetivoDe(a), eb = efetivoDe(b);
+      var ea = efetivoNetDe(a), eb = efetivoNetDe(b);
       if ((ea === null) !== (eb === null)) return ea === null ? 1 : -1;
-      var ca = ea === null ? a.custo : ea, cb = eb === null ? b.custo : eb;
+      var ca = ea === null ? a.custo * fatorCompra : ea, cb = eb === null ? b.custo * fatorCompra : eb;
       return ca - cb || b.livre - a.livre;
     });
   }
@@ -75,6 +96,11 @@
 
   // ---------- desenho ----------
   function pct(v, base) { return Math.max(0, Math.min(100, (v * 100) / base)); }
+  function texto(t, seletor, valor, casas) {
+    var el = t.el.querySelector(seletor);
+    el.textContent = valor === null ? "—" : fmt(valor, casas);
+    el.classList.toggle("negativo", valor !== null && valor < 0);
+  }
 
   function desenharTanque(t, sai, posicao, sugerido) {
     var livreResta = Math.max(0, t.livre - sai);
@@ -88,17 +114,21 @@
     r.style.bottom = (hResta + hSai) + "%"; r.style.height = hRes + "%";
     c.querySelector(".rotulo-sai").textContent = sai > 0 ? "sai " + fmt(sai / 1000, 1) + " t" : fmt(pct(t.saldo, t.capacidade), 0) + "%";
 
-    var ef = efetivoDe(t);
-    t.el.querySelector(".v-efetivo").textContent = ef === null ? "—" : fmt(ef, 4);
-    var sobra = ef === null ? null : preco - ef;
-    var vs = t.el.querySelector(".v-sobra");
-    vs.textContent = sobra === null ? "—" : fmt(sobra, 4);
-    vs.parentNode.className = sobra !== null && sobra < 0 ? "negativo" : "";
+    var f = freteDe(t), ef = efetivoDe(t), efn = efetivoNetDe(t);
+    texto(t, ".v-frete-net", f === null ? null : f * fatorFrete, 4);
+    texto(t, ".v-efetivo", ef, 4);
+    texto(t, ".v-efetivo-net", efn, 4);
+    texto(t, ".v-sobra", ef === null ? null : preco - ef, 4);
+    texto(t, ".v-sobra-net", efn === null ? null : precoNet - efn, 4);
     t.el.classList.toggle("sem-frete", ef === null);
     t.el.classList.toggle("escolhido", sai > 0);
     t.el.classList.toggle("sugerido", sugerido);
     t.el.querySelector(".posicao").textContent = posicao + "º";
-    if (document.activeElement !== t.deslizar) t.deslizar.value = sai;
+    // A barra só vai até o que cabe no pedido.
+    var limite = limiteDe(t);
+    t.deslizar.max = String(Math.max(limite, 1));
+    t.deslizar.disabled = limite <= 0 && sai <= 0;
+    if (document.activeElement !== t.deslizar) t.deslizar.value = String(Math.min(sai, limite));
   }
 
   // Linhas de cada tanque escolhido até o destino; a grossura mostra quanto sai.
@@ -112,10 +142,10 @@
     svg.setAttribute("height", altura);
     var destinoX = largura - 120, destinoY = altura / 2, inicioX = 150;
 
-    function el(nome, attrs, texto) {
+    function el(nome, attrs, conteudo) {
       var e = document.createElementNS(ns, nome);
       Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
-      if (texto !== undefined) e.textContent = texto;
+      if (conteudo !== undefined) e.textContent = conteudo;
       svg.appendChild(e);
       return e;
     }
@@ -140,23 +170,29 @@
     el("text", { x: destinoX + 16, y: destinoY + 13, "class": "rota-rotulo" }, form.dataset.destino || "");
   }
 
+  function escrever(id, valor, casas) {
+    document.getElementById(id).textContent = valor === null ? "—" : fmt(valor, casas);
+  }
+
   function atualizar() {
-    var ordem = ranking(), sug = sugestao(), alocado = 0, custo = 0, semFrete = false, escolhidos = [];
+    var ordem = ranking(), sug = sugestao(), alocado = 0, custo = 0, custoNet = 0, semFrete = false, escolhidos = [];
     ordem.forEach(function (t, i) {
       var sai = qtdDe(t);
       desenharTanque(t, sai, i + 1, (sug.get(t) || 0) > 0);
+      // A posição do cartão segue o ranking. Muda só a ordem visual (CSS),
+      // sem tirar o cartão do lugar: assim o campo em que você digita não perde o foco.
+      t.el.style.order = String(i);
       if (sai > 0) {
         alocado += sai;
         var f = freteDe(t);
         if (f === null) semFrete = true;
         custo += sai * (t.custo + (f || 0));
+        custoNet += sai * (t.custo * fatorCompra + (f || 0) * fatorFrete);
         escolhidos.push({ t: t, sai: sai });
       }
     });
-    // A ordem dos cartões na tela segue o ranking.
-    ordem.forEach(function (t) { t.el.parentNode.appendChild(t.el); });
 
-    document.getElementById("p-alocado").textContent = fmt(alocado, 0);
+    escrever("p-alocado", alocado, 0);
     var barra = document.getElementById("p-barra");
     barra.style.width = pct(alocado, pedidoKg) + "%";
     barra.className = alocado > pedidoKg ? "excesso" : (Math.abs(alocado - pedidoKg) < 0.0005 ? "completo" : "");
@@ -164,46 +200,53 @@
     aviso.textContent = Math.abs(falta) < 0.0005 ? "Pedido completo" : (falta > 0 ? "Faltam " + fmt(falta, 0) + " kg" : "Passou " + fmt(-falta, 0) + " kg do pedido");
     aviso.className = "pequeno " + (Math.abs(falta) < 0.0005 ? "positivo" : "negativo");
 
-    var receita = alocado * preco, margem = receita - custo;
-    document.getElementById("p-medio").textContent = alocado ? fmt(custo / alocado, 4) + (semFrete ? "*" : "") : "—";
-    document.getElementById("p-custo").textContent = alocado ? fmt(custo, 2) : "—";
-    document.getElementById("p-margem").textContent = alocado ? fmt(margem, 2) : "—";
-    document.getElementById("p-margem-kg").textContent = alocado ? fmt(margem / alocado, 4) : "—";
-    document.getElementById("p-margem-b").className = margem < 0 ? "negativo" : "positivo";
+    var tem = alocado > 0;
+    var margem = alocado * preco - custo, margemNet = alocado * precoNet - custoNet;
+    document.getElementById("p-medio").textContent = tem ? fmt(custo / alocado, 4) + (semFrete ? "*" : "") : "—";
+    document.getElementById("p-medio-net").textContent = tem ? fmt(custoNet / alocado, 4) + (semFrete ? "*" : "") : "—";
+    escrever("p-custo", tem ? custo : null, 2);
+    escrever("p-custo-net", tem ? custoNet : null, 2);
+    escrever("p-margem", tem ? margem : null, 2);
+    escrever("p-margem-net", tem ? margemNet : null, 2);
+    escrever("p-margem-net-kg", tem ? margemNet / alocado : null, 4);
+    document.getElementById("p-margem-b").className = margemNet < 0 ? "negativo" : "positivo";
     desenharRota(escolhidos);
   }
 
-  // Números nos campos no jeito brasileiro: 43.954,5 e 0,0900.
-  function paraCampo(n, minimo, maximo) {
-    return n.toLocaleString("pt-BR", { minimumFractionDigits: minimo, maximumFractionDigits: maximo });
-  }
-  function definir(t, kg) {
-    kg = Math.max(0, Math.min(t.livre, kg));
-    t.qtd.value = kg ? paraCampo(kg, 0, 3) : "";
+  // cru = sem ponto de milhar (enquanto a pessoa digita, para o próximo dígito não virar decimal).
+  function definir(t, kg, cru) {
+    kg = Math.max(0, Math.min(limiteDe(t), kg));
+    if (!kg) { t.qtd.value = ""; return; }
+    t.qtd.value = cru ? String(Math.round(kg * 1000) / 1000).replace(".", ",") : paraCampo(kg, 0, 3);
   }
 
   // ---------- eventos ----------
   tanques.forEach(function (t) {
-    t.qtd.addEventListener("input", atualizar);
+    // Enquanto digita, o número fica como você escreveu; só corta se passar do limite.
+    t.qtd.addEventListener("input", function () {
+      var limite = limiteDe(t);
+      if (qtdDe(t) > limite) definir(t, limite, true);
+      atualizar();
+    });
+    // Ao sair do campo, arruma o formato (5800 → 5.800).
+    t.qtd.addEventListener("change", function () { if (qtdDe(t) > 0) definir(t, qtdDe(t)); else t.qtd.value = ""; atualizar(); });
     t.frete.addEventListener("input", atualizar);
+    t.frete.addEventListener("change", function () { var f = ler(t.frete.value); if (f !== null) t.frete.value = paraCampo(f, 4, 4); atualizar(); });
     t.deslizar.addEventListener("input", function () { definir(t, Number(t.deslizar.value)); atualizar(); });
     // Clicar no tanque: se já usa, tira; se não, completa o que falta (até o livre).
     t.cilindro.addEventListener("click", function () {
-      if (qtdDe(t) > 0) { definir(t, 0); }
-      else {
-        var outros = tanques.reduce(function (s, o) { return o === t ? s : s + qtdDe(o); }, 0);
-        definir(t, Math.max(pedidoKg - outros, 0) || t.livre);
-      }
+      definir(t, qtdDe(t) > 0 ? 0 : limiteDe(t));
       atualizar();
     });
   });
   document.getElementById("usar-sugestao").addEventListener("click", function () {
     var sug = sugestao();
+    tanques.forEach(function (t) { t.qtd.value = ""; });
     tanques.forEach(function (t) { definir(t, sug.get(t) || 0); });
     atualizar();
   });
   document.getElementById("zerar-tudo").addEventListener("click", function () {
-    tanques.forEach(function (t) { definir(t, 0); });
+    tanques.forEach(function (t) { t.qtd.value = ""; });
     atualizar();
   });
   document.getElementById("minimo").addEventListener("input", atualizar);
@@ -212,7 +255,8 @@
   tanques.forEach(function (t) {
     var f = ler(t.frete.value);
     if (f !== null) t.frete.value = paraCampo(f, 4, 4);
-    if (qtdDe(t) > 0) definir(t, qtdDe(t));
+    var q = qtdDe(t);
+    t.qtd.value = q ? paraCampo(q, 0, 3) : "";
   });
 
   // Pedido novo sem nada escolhido: já começa com a rota sugerida.

@@ -153,3 +153,12 @@ SITUACOES = {
 def situacao(codigo, texto=""):
     rotulo, cor = SITUACOES.get(codigo, (texto or codigo, "cinza"))
     return format_html('<span class="etiqueta {}">{}</span>', cor, rotulo)
+
+
+@register.filter
+def mult(valor, fator):
+    """{{ preco|mult:pedido.fator_venda }} → preço net."""
+    try:
+        return Decimal(str(valor or 0)) * Decimal(str(fator or 0))
+    except InvalidOperation:
+        return ""
