@@ -97,3 +97,40 @@ def test_tela_de_conferencia(client, db, tmp_path):
     with open(_planilha(tmp_path), "rb") as f:
         resp = client.post("/sistema/conferir-planilha/", {"arquivo": SimpleUploadedFile("dre.xlsx", f.read())})
     assert resp.status_code == 200 and "dre.xlsx" in resp.content.decode()
+
+
+@pytest.fixture
+def logado(client, db):
+    usuario = User.objects.create_superuser("teste", "", "x")
+    client.force_login(usuario)
+    return client
+
+
+def test_tela_do_pedido_explica_custos_e_avisa_nao_salvo(logado, pedido):
+    html = logado.get(f"/vendas/{pedido.pk}/").content.decode()
+    assert "Como cada custo é calculado" in html
+    # preço 5 × 0,74415 = 3,7208 net
+    assert "R$ 3,7208/kg" in html
+    assert 'id="p-nao-salvo"' in html and "data-salvo-qtd" in html
+    assert 'step="10"' in html
+
+
+def test_cadastrar_local_ja_com_tanque(logado, glicerina):
+    from apps.cadastros.models import Local, Tanque
+
+    resposta = logado.post("/novo/local/", {
+        "nome": "Tanque Novo Paulínia", "tipo": "TANQUE", "cidade": "PAULINIA", "uf": "SP", "ativo": "on",
+        "tanque_produto": glicerina.pk, "tanque_capacidade": "500000", "tanque_identificacao": "TQ-01",
+    })
+    assert resposta.status_code == 302
+    local = Local.objects.get(nome="Tanque Novo Paulínia")
+    assert Tanque.objects.get(local=local).capacidade_kg == Decimal("500000")
+    # a entrada de saldo já abre com o local escolhido
+    html = logado.get(f"/estoque/entrada/?local={local.pk}").content.decode()
+    assert f'value="{local.pk}" selected' in html
+
+
+def test_local_sem_capacidade_nao_salva(logado, glicerina):
+    resposta = logado.post("/novo/local/", {"nome": "X", "tipo": "TANQUE", "ativo": "on", "tanque_produto": glicerina.pk})
+    assert resposta.status_code == 200
+    assert "Informe a capacidade" in resposta.content.decode()

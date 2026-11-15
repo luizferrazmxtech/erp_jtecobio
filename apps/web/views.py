@@ -425,14 +425,46 @@ class ProdutoForm(forms.ModelForm):
 
 
 class LocalForm(forms.ModelForm):
+    """Local de armazenagem. Ao criar, já dá para cadastrar o tanque dele."""
+
+    tanque_produto = forms.ModelChoiceField(
+        label="Produto do tanque", queryset=Produto.objects.none(), required=False,
+        help_text="Deixe em branco se ainda não sabe; dá para adicionar tanques depois.")
+    tanque_capacidade = forms.DecimalField(label="Capacidade (kg)", required=False, min_value=0,
+                                           max_digits=14, decimal_places=3)
+    tanque_identificacao = forms.CharField(label="Identificação", required=False, max_length=50,
+                                           help_text="Ex.: TQ-03")
+
     class Meta:
         model = Local
         fields = ["nome", "tipo", "parceiro", "cidade", "uf", "ativo"]
+        help_texts = {"parceiro": "Dono do local (distribuidora, industrializador, armazém). Se não estiver na lista, cadastre o parceiro antes."}
 
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
+        # Qualquer parceiro ativo: uma distribuidora nova ainda pode não estar marcada como armazém.
         self.fields["parceiro"].queryset = Parceiro.objects.filter(
-            Q(eh_armazem=True) | Q(eh_industrializador=True)).order_by("razao_social")
+            Q(ativo=True) | Q(pk=self.instance.parceiro_id or 0)).order_by("razao_social")
+        if self.instance.pk:  # editar: os tanques ficam em "Adicionar tanque"
+            for c in ("tanque_produto", "tanque_capacidade", "tanque_identificacao"):
+                del self.fields[c]
+        else:
+            self.fields["tanque_produto"].queryset = Produto.objects.filter(controla_estoque=True, ativo=True)
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get("tanque_produto") and not dados.get("tanque_capacidade"):
+            self.add_error("tanque_capacidade", "Informe a capacidade do tanque.")
+        return dados
+
+    def save(self, commit=True):
+        local = super().save(commit)
+        produto = self.cleaned_data.get("tanque_produto")
+        if commit and produto:
+            Tanque.objects.create(local=local, produto=produto,
+                                  capacidade_kg=self.cleaned_data["tanque_capacidade"],
+                                  identificacao=self.cleaned_data.get("tanque_identificacao") or "")
+        return local
 
 
 class TanqueForm(forms.ModelForm):
@@ -481,6 +513,8 @@ CADASTROS = {
 }
 
 SECOES = {
+    "local": [("Preencha os", "dados do local", "Onde o produto fica guardado: distribuidora, armazém, industrializador.", ["nome", "tipo", "parceiro", "cidade", "uf", "ativo"]),
+              ("Já cadastre o", "tanque", "Opcional. Um tanque por produto em cada local; outros podem ser adicionados depois.", ["tanque_produto", "tanque_capacidade", "tanque_identificacao"])],
     "parceiro": [("Preencha os", "dados gerais", "Nome, documento e cidade.", ["razao_social", "nome_fantasia", "documento", "inscricao_estadual", "cidade", "uf", "ativo"]),
                  ("Marque os", "papéis", "Uma mesma empresa pode ser cliente e fornecedora, por exemplo.", ["eh_cliente", "eh_fornecedor", "eh_transportadora", "eh_industrializador", "eh_armazem"])],
     "contrato": [("Preencha os", "dados do contrato", "Quem, o quê e quando.", ["tipo", "numero", "parceiro", "produto", "modalidade", "mes_referencia", "status"]),
@@ -507,10 +541,14 @@ def _form_cadastro(request, nome, pk=None):
             return redirect("web:parceiro", pk=salvo.pk)
         if nome == "contrato":
             return redirect("web:contrato", pk=salvo.pk)
+        if nome in ("local", "tanque") and not pk:
+            messages.info(request, "Para colocar saldo no tanque, use Dar entrada na lista de locais.")
         return redirect(voltar)
     secoes = []
     for leve, forte, sub, campos in SECOES.get(nome, [("Preencha os", "dados", "", list(form.fields))]):
-        secoes.append({"leve": leve, "forte": forte, "sub": sub, "campos": [form[c] for c in campos]})
+        campos = [form[c] for c in campos if c in form.fields]
+        if campos:
+            secoes.append({"leve": leve, "forte": forte, "sub": sub, "campos": campos})
     verbo = "Editar" if pk else "Adicionar"
     return render(request, "web/formulario.html", {
         "form": form, "secoes": secoes, "titulo": f"{verbo} {modelo._meta.verbose_name}", "icone": ic,

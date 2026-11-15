@@ -1,0 +1,36 @@
+{% load erp %}{% with e=explica.exemplo %}
+<details class="explica-custos">
+  <summary>{% icone "ajuda" %} Como cada custo é calculado</summary>
+  <div class="explica-corpo">
+    <p>Os números <b>net</b> são sem os impostos que a JT recupera como crédito (ICMS, PIS e COFINS), do mesmo jeito que a planilha DRE calcula. Os números <b>com impostos</b> são os valores da nota.</p>
+    <dl>
+      <dt>Preço net de venda</dt>
+      <dd>{% if pedido.exportacao %}Exportação não tem ICMS, PIS nem COFINS: o preço net é o próprio preço, R$ {{ pedido.preco_unitario|num:4 }}.{% else %}
+        Preço × (1 − ICMS {{ explica.icms_venda|num:0 }}%) × (1 − PIS 1,65% − COFINS 7,6%) = R$ {{ pedido.preco_unitario|num:4 }} × {{ pedido.fator_venda|num:5 }} = <b>R$ {{ explica.preco_net|num:4 }}/kg</b>.{% endif %}</dd>
+
+      <dt>Produto net</dt>
+      <dd>Custo do produto no tanque × (1 − ICMS {{ explica.icms_compra|num:0 }}% da compra) × (1 − 9,25% de PIS/COFINS) = custo × {{ pedido.fator_compra|num:4 }}.
+        {% if e %}No {{ e.nome }}: R$ {{ e.custo|num:4 }} × {{ pedido.fator_compra|num:4 }} = <b>R$ {{ e.custo_net|num:4 }}/kg</b>.{% endif %}
+        O custo do tanque é o custo médio do que entrou nele (preço da nota de compra).</dd>
+
+      <dt>Frete net</dt>
+      <dd>Frete por kg × 0,88, porque o CT-e dá crédito de 12% de ICMS (o frete não tem PIS/COFINS na conta da planilha).
+        {% if e and e.frete is not None %}No {{ e.nome }}: R$ {{ e.frete|num:4 }} × 0,88 = <b>R$ {{ e.frete_net|num:4 }}/kg</b>.{% endif %}
+        O frete vem da tabela de frete (Vendas → Fretes) e pode ser mudado no cartão do tanque. Sem tabela, o frete conta como zero e o custo médio aparece com <b>*</b>.</dd>
+
+      <dt>Custo efetivo do tanque</dt>
+      <dd>Produto + frete. {% if e and e.efetivo is not None %}No {{ e.nome }}: R$ {{ e.custo|num:4 }} + R$ {{ e.frete|num:4 }} = R$ {{ e.efetivo|num:4 }} com impostos, e R$ {{ e.custo_net|num:4 }} + R$ {{ e.frete_net|num:4 }} = <b>R$ {{ e.efetivo_net|num:4 }}/kg net</b>.{% endif %}
+        A rota sugerida começa pelo tanque de menor custo efetivo net.</dd>
+
+      <dt>Sobra por kg</dt>
+      <dd>Preço − custo efetivo. {% if e and e.sobra_net is not None %}No {{ e.nome }}, net: R$ {{ explica.preco_net|num:4 }} − R$ {{ e.efetivo_net|num:4 }} = <b>R$ {{ e.sobra_net|num:4 }}/kg</b>.{% endif %}</dd>
+
+      <dt>Custo efetivo médio</dt>
+      <dd>Média dos tanques escolhidos, pesada pelos quilos: soma de (kg que sai × custo efetivo) ÷ kg alocados.</dd>
+
+      <dt>Margem net</dt>
+      <dd>Receita net − custo net = kg × preço net − soma de (kg × custo efetivo net). A margem "com impostos" faz a mesma conta com os valores cheios.</dd>
+    </dl>
+  </div>
+</details>
+{% endwith %}
