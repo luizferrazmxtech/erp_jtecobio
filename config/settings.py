@@ -131,7 +131,9 @@ LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"
 USE_I18N = True
 USE_TZ = True
-USE_THOUSAND_SEPARATOR = True
+# Sem separador de milhar automático: ele estragava ids em links (1.051).
+# Os números das telas são formatados pelos filtros kg, brl e num (apps/web/templatetags/erp.py).
+USE_THOUSAND_SEPARATOR = False
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"

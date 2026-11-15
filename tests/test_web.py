@@ -111,3 +111,27 @@ def test_exemplos_entram_e_saem_sem_mexer_no_resto(dados, glicerina, aroma, biob
     assert not RegistroExemplo.objects.exists()
     assert estoque.saldo(glicerina, aroma) + estoque.saldo(glicerina, biobrotas) == saldo_antes
     assert Contrato.objects.filter(pk=dados["contrato"].pk).exists()
+
+
+def test_link_do_tanque_nao_usa_separador_de_milhar(logado, db, aroma):
+    """No painel, o link do tanque levava a ?produto=1.051 e dava erro."""
+    from apps.cadastros.models import Produto
+
+    produto = Produto.objects.create(pk=1051, nome="GBD USP")
+    estoque.registrar_entrada(produto=produto, local=aroma, quantidade_kg=1000, custo_unitario="5", data=DIA)
+    pagina = logado.get("/").content.decode()
+    assert "produto=1051" in pagina and "produto=1.051" not in pagina
+    assert logado.get("/estoque/movimentacoes/?local=1&produto=1051").status_code == 200
+
+
+def test_pedido_mostra_tanques_com_custo_efetivo_e_rota_sugerida(logado, dados, glicerina, aroma, biobrotas):
+    TabelaFrete.objects.create(origem=aroma, destino_uf="SP", preco_kg="0.30")
+    TabelaFrete.objects.create(origem=biobrotas, destino_uf="SP", preco_kg="0.10")
+    pedido = Pedido.objects.create(cliente=dados["cliente"], produto=glicerina, quantidade_kg=60000, data=DIA,
+                                   preco_unitario="7.63", destino_cidade="JANDIRA", destino_uf="SP")
+    pagina = logado.get(f"/vendas/{pedido.pk}/").content.decode()
+    # Um cartão por tanque, com custo e sugestão: Biobrotas (5,70+0,10=5,80) completa
+    # 40.000 kg antes do Aroma (5,58+0,30=5,88), que entra com os 20.000 que faltam.
+    assert pagina.count('class="origem') == 2
+    assert 'data-sugerido="40000' in pagina and 'data-sugerido="20000' in pagina
+    assert "js/rota.js" in pagina
