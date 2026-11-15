@@ -254,7 +254,38 @@ def contrato(request, pk):
     return render(request, "web/contrato.html", {
         "c": c, "itens": itens, "em_notas": c.quantidade_entregue - c.entregue_antes, "pedidos": c.pedidos.select_related("produto"),
         "pct": int((c.quantidade_kg - c.saldo) * 100 / c.quantidade_kg) if c.quantidade_kg else 0,
+        "livres": _notas_sem_contrato(c)[:30],
+        "pode_ligar": request.user.has_perm("contratos.change_contrato"),
     })
+
+
+def _notas_sem_contrato(c: Contrato):
+    """Itens de nota do mesmo parceiro e produto que ainda não abatem nenhum contrato.
+
+    Contrato de compra ↔ notas de entrada; contrato de venda ↔ notas de saída."""
+    direcao = NotaFiscal.Direcao.ENTRADA if c.tipo == Contrato.Tipo.COMPRA else NotaFiscal.Direcao.SAIDA
+    return (NotaItem.objects.filter(nota__parceiro=c.parceiro, nota__direcao=direcao, nota__cancelada=False,
+                                    produto=c.produto, contrato__isnull=True)
+            .select_related("nota").order_by("-nota__data_emissao", "nota__numero"))
+
+
+@login_required
+@permission_required("contratos.change_contrato", raise_exception=True)
+def contrato_ligar_nota(request, pk):
+    """Liga (ou desliga) um item de nota a este contrato. Era feito só na administração."""
+    c = get_object_or_404(Contrato, pk=pk)
+    if request.method == "POST":
+        if request.POST.get("acao") == "desligar":
+            item = get_object_or_404(NotaItem, pk=request.POST.get("item"), contrato=c)
+            item.contrato = None
+            item.save(update_fields=["contrato"])
+            messages.success(request, f"NF {item.nota.numero} desligada do contrato {c.numero}.")
+        else:
+            item = get_object_or_404(_notas_sem_contrato(c), pk=request.POST.get("item"))
+            item.contrato = c
+            item.save(update_fields=["contrato"])
+            messages.success(request, f"NF {item.nota.numero} ligada ao contrato {c.numero}: o saldo já foi recalculado.")
+    return redirect("web:contrato", pk=pk)
 
 
 # ---------------------------------------------------------------------------

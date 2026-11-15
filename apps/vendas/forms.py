@@ -24,8 +24,18 @@ class PedidoForm(forms.ModelForm):
         self.fields["data"].initial = timezone.localdate()
         self.fields["cliente"].queryset = Parceiro.objects.filter(eh_cliente=True, ativo=True)
         self.fields["produto"].queryset = Produto.objects.filter(ativo=True, controla_estoque=True)
-        self.fields["contrato"].queryset = Contrato.objects.filter(
-            tipo=Contrato.Tipo.VENDA, status=Contrato.Status.ABERTO).select_related("parceiro")
+        # Só contratos de venda abertos do cliente escolhido (a tela filtra de novo ao trocar o cliente).
+        contratos = Contrato.objects.filter(
+            tipo=Contrato.Tipo.VENDA, status=Contrato.Status.ABERTO).select_related("parceiro", "produto")
+        cliente = self.data.get("cliente") or self.initial.get("cliente") or self.instance.cliente_id
+        if str(cliente or "").isdigit():
+            contratos = contratos.filter(parceiro_id=cliente)
+        else:
+            contratos = contratos.none()
+        self.fields["contrato"].queryset = contratos.order_by("-mes_referencia", "numero")
+        self.fields["contrato"].label_from_instance = lambda c: f"{c.numero} · {c.produto} · R$ {str(c.preco_unitario).replace('.', ',')}/kg"
+        self.fields["contrato"].empty_label = "Sem contrato"
+        self.fields["contrato"].help_text = "Só aparecem os contratos de venda abertos deste cliente."
         self.fields["destino_cidade"].required = False
         self.fields["destino_uf"].required = False
 
@@ -53,7 +63,7 @@ class FaturarForm(forms.Form):
     data = forms.DateField(initial=timezone.localdate, widget=forms.DateInput(attrs={"type": "date"}))
     nota = forms.ModelChoiceField(
         queryset=NotaFiscal.objects.none(), required=False, label="NF de venda",
-        help_text="Cadastre a NF no admin (Notas fiscais) antes, se quiser ligá-la ao pedido.",
+        help_text="As NFs vêm do sistema antigo (importação diária); se ainda não apareceu, fature e ligue depois.",
     )
 
     def __init__(self, *args, pedido=None, **kwargs):

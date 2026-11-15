@@ -466,3 +466,4 @@ table.tabela { width: 100%; border-collapse: collapse; background: #fff; }
   .aviso-nao-salvo, .explica-custos { margin-left: 12px; margin-right: 12px; }
 }
 .escolha-rota .aviso-nao-salvo, .escolha-rota .explica-custos { margin-top: 12px; }
+.custos .imposto td { text-align: left; font-size: 11.5px; line-height: 1.35; color: var(--suave); white-space: normal; padding-top: 2px; }

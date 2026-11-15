@@ -82,7 +82,8 @@
 
   <div class="rotulo">Sistema</div>
   <a class="item {% ativo '/sistema/conferir-planilha' %}" href="{% url 'web:conferir_planilha' %}">{% icone "alerta" %} Conferir planilha</a>
-  {% if user.is_staff %}<a class="item" href="{% url 'admin:index' %}">{% icone "config" %} Administração</a>{% endif %}
+  {# A administração antiga do Django ficou só para usuários e acessos (e suporte): tudo do dia a dia está nas telas acima. #}
+  {% if user.is_superuser %}<a class="item" href="{% url 'admin:auth_user_changelist' %}">{% icone "config" %} Usuários e acessos</a>{% endif %}
 </nav>
 <div class="cortina" id="cortina"></div>
 

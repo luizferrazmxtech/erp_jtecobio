@@ -134,3 +134,11 @@ def test_local_sem_capacidade_nao_salva(logado, glicerina):
     resposta = logado.post("/novo/local/", {"nome": "X", "tipo": "TANQUE", "ativo": "on", "tanque_produto": glicerina.pk})
     assert resposta.status_code == 200
     assert "Informe a capacidade" in resposta.content.decode()
+
+
+def test_margem_bruta_menos_imposto_a_pagar_da_a_net(logado, pedido):
+    services.aplicar_sugestao(pedido)
+    assert round(pedido.margem - pedido.impostos_venda, 6) == round(pedido.margem_net, 6)
+    html = logado.get(f"/vendas/{pedido.pk}/").content.decode()
+    assert "Margem por kg" in html and "Sobra" not in html
+    assert "Por que a net pode ser menor que a bruta" in html

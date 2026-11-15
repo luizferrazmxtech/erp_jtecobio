@@ -67,7 +67,14 @@ def novo(request):
         services.aplicar_sugestao(pedido)
         messages.success(request, f"Pedido {pedido.numero} criado com as origens sugeridas. Revise e confirme.")
         return redirect("vendas:detalhe", pk=pedido.pk)
-    return render(request, "vendas/novo.html", {"form": form})
+    # Todos os contratos de venda abertos, para a tela mostrar só os do cliente escolhido.
+    contratos = [
+        {"id": c.pk, "cliente": c.parceiro_id, "produto": c.produto_id, "preco": str(c.preco_unitario or ""),
+         "texto": form.fields["contrato"].label_from_instance(c)}
+        for c in Contrato.objects.filter(tipo=Contrato.Tipo.VENDA, status=Contrato.Status.ABERTO)
+        .select_related("produto").order_by("-mes_referencia", "numero")
+    ]
+    return render(request, "vendas/novo.html", {"form": form, "contratos": contratos})
 
 
 def _decimal(valor, padrao=None):
@@ -132,7 +139,13 @@ def _explicacao(pedido, linhas) -> dict:
         if frete is not None:
             exemplo["efetivo"] = o.custo_kg + frete
             exemplo["efetivo_net"] = exemplo["custo_net"] + exemplo["frete_net"]
-            exemplo["sobra_net"] = (pedido.preco_unitario * pedido.fator_venda).quantize(q4) - exemplo["efetivo_net"]
+            preco_net = (pedido.preco_unitario * pedido.fator_venda).quantize(q4)
+            exemplo["margem"] = pedido.preco_unitario - exemplo["efetivo"]
+            exemplo["margem_net"] = preco_net - exemplo["efetivo_net"]
+            # bruta − net = imposto da venda − créditos (produto e frete)
+            exemplo["imposto_venda"] = pedido.preco_unitario - preco_net
+            exemplo["creditos"] = exemplo["efetivo"] - exemplo["efetivo_net"]
+            exemplo["imposto_pagar"] = exemplo["imposto_venda"] - exemplo["creditos"]
     return {
         "preco_net": (pedido.preco_unitario * pedido.fator_venda).quantize(q4),
         "icms_venda": pedido.icms_venda or 0,

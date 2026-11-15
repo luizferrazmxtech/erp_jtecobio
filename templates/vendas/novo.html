@@ -24,9 +24,36 @@
       {% with campo=form.preco_unitario %}{% include "web/_campo.html" %}{% endwith %}
       {% with campo=form.destino_cidade %}{% include "web/_campo.html" %}{% endwith %}
       {% with campo=form.destino_uf %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.exportacao %}{% include "web/_campo.html" %}{% endwith %}
+      {% with campo=form.icms_venda %}{% include "web/_campo.html" %}{% endwith %}
       {% with campo=form.observacao %}{% include "web/_campo.html" %}{% endwith %}
     </div>
   </div>
   <div class="rodape"><a class="botao claro" href="{% url 'vendas:lista' %}">Cancelar</a><button class="botao">Criar pedido e sugerir tanques</button></div>
 </form>
+{{ contratos|json_script:"contratos-venda" }}
+<script>
+/* Contrato: só os do cliente escolhido. Ao escolher um contrato, já preenche produto e preço. */
+(function () {
+  var contratos = JSON.parse(document.getElementById("contratos-venda").textContent);
+  var cliente = document.getElementById("id_cliente"), contrato = document.getElementById("id_contrato");
+  var produto = document.getElementById("id_produto"), preco = document.getElementById("id_preco_unitario");
+  function montar() {
+    var atual = contrato.value, lista = contratos.filter(function (c) { return String(c.cliente) === cliente.value; });
+    contrato.innerHTML = "";
+    var vazio = new Option(lista.length ? "Sem contrato" : "Este cliente não tem contrato de venda aberto", "");
+    contrato.add(vazio);
+    lista.forEach(function (c) { contrato.add(new Option(c.texto, c.id, false, String(c.id) === atual)); });
+    contrato.disabled = !lista.length;
+  }
+  cliente.addEventListener("change", montar);
+  contrato.addEventListener("change", function () {
+    var c = contratos.filter(function (x) { return String(x.id) === contrato.value; })[0];
+    if (!c) return;
+    produto.value = c.produto;
+    if (c.preco && !preco.value) preco.value = c.preco;
+  });
+  montar();
+})();
+</script>
 {% endblock %}
