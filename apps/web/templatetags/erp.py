@@ -163,3 +163,12 @@ def mult(valor, fator):
         return Decimal(str(valor or 0)) * Decimal(str(fator or 0))
     except InvalidOperation:
         return ""
+
+
+@register.filter
+def chave(dicionario, k):
+    """{{ areas|chave:"vendas" }} → valor do dicionário naquela chave."""
+    try:
+        return dicionario.get(k)
+    except AttributeError:
+        return None

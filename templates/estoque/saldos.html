@@ -9,7 +9,7 @@
   <a class="botao claro" href="{% url 'estoque:saida' %}">{% icone "saida" %} Saída</a>
   <a class="botao claro" href="{% url 'estoque:transferencia' %}">{% icone "transferir" %} Transferência</a>
   <a class="botao claro" href="{% url 'estoque:ajuste' %}">{% icone "ajuste" %} Ajuste de inventário</a>
-  <span class="espaco"></span><span class="suave pequeno">Método de custo: <b>{{ metodo }}</b></span>
+  <span class="espaco"></span><span class="suave pequeno">Método de custo: <b>{{ metodo }}</b>{% if user.is_superuser %} · <a href="{% url 'web:configuracoes' %}">mudar</a>{% endif %}</span>
 </div>
 <form class="cartao filtros" method="get">
   <div class="campos">

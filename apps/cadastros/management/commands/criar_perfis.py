@@ -1,7 +1,7 @@
 """Cria os grupos de usuários (perfis) com as permissões de cada área.
 
 Rode depois de `migrate`:  python manage.py criar_perfis
-Depois, no admin, coloque cada usuário no grupo certo.
+Depois, em Sistema → Usuários, marque o perfil de cada usuário.
 """
 
 from django.contrib.auth.models import Group, Permission

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import busca, views
+from . import busca, sistema, views
 
 app_name = "web"
 
@@ -20,5 +20,9 @@ urlpatterns = [
     path("novo/<str:nome>/", views.adicionar, name="adicionar"),
     path("editar/<str:nome>/<int:pk>/", views.editar, name="editar"),
     path("busca/parceiros/", busca.parceiros, name="busca_parceiros"),
+    path("sistema/usuarios/", sistema.usuarios, name="usuarios"),
+    path("sistema/usuarios/novo/", sistema.usuario, name="usuario_novo"),
+    path("sistema/usuarios/<int:pk>/", sistema.usuario, name="usuario"),
+    path("sistema/configuracoes/", sistema.configuracoes, name="configuracoes"),
     path("sistema/conferir-planilha/", views.conferir_planilha, name="conferir_planilha"),
 ]
