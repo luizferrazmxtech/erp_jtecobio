@@ -336,16 +336,22 @@ def tmo_do_tipo(tipo: TipoRecipiente, ultimas: int = 10) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def valor_por_mes(inicio: date, fim: date | None = None) -> dict[str, Decimal]:
+def valor_por_mes(inicio: date, fim: date | None = None, excluir_notas=None) -> dict[str, Decimal]:
     """Valor (bruto) das OS concluídas ou faturadas por mês de conclusão.
 
-    {"2026-10": Decimal("11062.50"), ...}. Usado no gráfico de vendas do painel."""
+    {"2026-10": Decimal("11062.50"), ...}. Usado no gráfico de vendas do painel.
+    `excluir_notas` (filtro Q de NotaFiscal) deixa de fora as OS cuja nota já
+    é contada de outro jeito, para não somar o mesmo serviço duas vezes."""
     qs = OrdemServico.objects.filter(
         status__in=[OrdemServico.Status.CONCLUIDA, OrdemServico.Status.FATURADA],
         concluida_em__date__gte=inicio,
     ).prefetch_related("itens")
     if fim:
         qs = qs.filter(concluida_em__date__lte=fim)
+    if excluir_notas is not None:
+        from apps.fiscal.models import NotaFiscal
+
+        qs = qs.exclude(nota__in=NotaFiscal.objects.filter(excluir_notas))
     resultado: dict[str, Decimal] = {}
     for os in qs:
         chave = timezone.localtime(os.concluida_em).strftime("%Y-%m")

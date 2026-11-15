@@ -576,3 +576,4 @@ a.indicador:hover { text-decoration: none; border-color: var(--borda-forte); }
 }
 .margem-forn { display: flex; flex-direction: column; gap: 4px; }
 .margem-forn b.vermelho { color: var(--vermelho); }
+.grafico-vendas .dica-mes .sub-dica { margin-top: 1px; padding-left: 18px; font-size: 11px; opacity: .75; }

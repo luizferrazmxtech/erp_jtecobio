@@ -137,16 +137,20 @@ def _total_por_mes(filtro, inicio) -> dict[str, Decimal]:
 def _vendas_por_mes(hoje: date, meses=12) -> dict:
     """Faturamento por mês, separado em vendas de produto e serviços (envase).
 
-    Os serviços vêm hoje das NF-e de industrialização. Quando existirem as
-    ordens de serviço, o valor delas entra em `servicos` do mesmo mês."""
+    Serviços = NF-e de industrialização + ordens de serviço concluídas que não
+    estão ligadas a uma dessas notas (a OS ligada já entra pelo valor da nota)."""
+    from apps.servicos.services import valor_por_mes
     inicio = date(hoje.year - (1 if hoje.month < meses else 0), (hoje.month - meses) % 12 + 1, 1)
     vendas_ = _total_por_mes(NOTA_DE_VENDA, inicio)
     servicos = _total_por_mes(NOTA_DE_SERVICO, inicio)
+    ordens = valor_por_mes(inicio, excluir_notas=NOTA_DE_SERVICO)
     colunas, ano, mes = [], inicio.year, inicio.month
     for _ in range(meses):
         chave = f"{ano}-{mes:02d}"
-        v, s_ = vendas_.get(chave) or ZERO, servicos.get(chave) or ZERO
-        colunas.append({"rotulo": f"{MESES[mes - 1]}/{str(ano)[2:]}", "vendas": v, "servicos": s_, "total": v + s_})
+        v, os_ = vendas_.get(chave) or ZERO, ordens.get(chave) or ZERO
+        s_ = (servicos.get(chave) or ZERO) + os_
+        colunas.append({"rotulo": f"{MESES[mes - 1]}/{str(ano)[2:]}", "vendas": v, "servicos": s_, "ordens": os_,
+                        "total": v + s_})
         mes += 1
         if mes > 12:
             mes, ano = 1, ano + 1

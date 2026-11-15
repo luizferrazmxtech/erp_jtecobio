@@ -288,3 +288,30 @@ def test_melhores_fornecedores_pela_margem_sobre_a_venda(logado, dados, glicerin
     forn = logado.get("/").context["fornecedores"]
     assert [f["parceiro"].razao_social for f in forn] == ["USINA BOA", "USINA CARA"]
     assert forn[0]["efetivo"] == Decimal("3.40") and forn[0]["margem_net"] > forn[1]["margem_net"] > 0
+
+
+def test_grafico_soma_ordens_de_servico_sem_contar_duas_vezes(logado, dados):
+    from apps.servicos import services as os_services
+    from apps.servicos.models import OrdemServico, TipoRecipiente
+
+    def os_concluida():
+        os = OrdemServico.objects.create(data=date.today(), cliente=dados["cliente"], descricao_produto="ADITIVO",
+                                         densidade=Decimal("1.26"), quantidade_kg=Decimal("5000"))
+        os_services.novo_item(os, TipoRecipiente.objects.get(nome="Tambor 200 L")).save()
+        os_services.recalcular(os)
+        item, luiz = os.itens.get(), User.objects.get(username="luiz")
+        os_services.apontar(os, luiz, "INICIO")
+        os_services.concluir(os, luiz, {item.pk: (20, Decimal("5000"))})
+        os.refresh_from_db()
+        return os
+
+    sem_nota = os_concluida()
+    com_nota = os_concluida()
+    nota = NotaFiscal.objects.create(direcao="S", numero=4018, parceiro=dados["cliente"], data_emissao=date.today(),
+                                     cfop="5124", valor_total="1500.00")
+    com_nota.nota = nota
+    com_nota.save()
+    mes = logado.get("/").context["grafico"]["colunas"][-1]
+    assert mes["ordens"] == sem_nota.valor_realizado > 0
+    assert mes["servicos"] == Decimal("1500.00") + sem_nota.valor_realizado  # a OS com nota entra só pela nota
+    assert mes["vendas"] == Decimal("211950.00")
