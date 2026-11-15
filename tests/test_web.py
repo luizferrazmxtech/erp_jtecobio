@@ -165,3 +165,12 @@ def test_ligar_e_desligar_nota_no_contrato(logado, dados, glicerina):
 def test_menu_sem_administracao(logado, dados):
     html = logado.get("/").content.decode()
     assert "Administração" not in html and "Usuários e acessos" in html
+
+
+def test_saldos_por_tanque_mostra_tanques_com_resumo(logado, dados, glicerina, aroma):
+    estoque.registrar_saida(produto=glicerina, local=aroma, quantidade_kg=5000, data=DIA, documento="NF 4100")
+    html = logado.get("/estoque/").content.decode()
+    assert "cilindro-grande" in html and "Últimas saídas" in html and "Últimas entradas" in html
+    assert "NF 4100" in html and "Livre para vender" in html
+    assert "45%" in html  # 45.000 kg num tanque de 100.000 kg
+    assert "Ver em tabela" in html
