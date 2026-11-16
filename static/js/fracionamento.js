@@ -44,6 +44,7 @@
         var p = numero(tr.querySelector(".r-preco").value);
         l.preco = p === null ? parseFloat(op.dataset.preco) : p;
         l.tempo = parseFloat(op.dataset.tempo) || 0;
+        l.nome = op.textContent.trim();
         tr.querySelector(".r-preco").placeholder = fmt(parseFloat(op.dataset.preco), 4);
       }
       linhas.push(l);
@@ -79,10 +80,93 @@
     document.getElementById("t-kg").textContent = tot.kg ? fmt(tot.kg, 0) : "—";
     document.getElementById("t-valor").textContent = tot.valor ? "R$ " + fmt(tot.valor, 2) : "—";
     document.getElementById("t-tempo").textContent = horas(tot.tempo);
-    var aviso = document.getElementById("f-sobra");
-    aviso.hidden = !(restante > 0.5 && ordem.length);
-    document.getElementById("f-sobra-kg").textContent = fmt(restante, 0);
+    desenharSaldo(kg, linhas.filter(function (l) { return l.cap > 0; }), restante);
   }
+
+  /* Gráfico do saldo: uma barra com o que vai em cada tipo de recipiente,
+     o que fica sem recipiente (vermelho) e a capacidade dos recipientes que
+     sobram vazios (listrado). A linha "chegou" marca a carga do caminhão. */
+  var CORES = ["#0e8a5f", "#2563c9", "#b7791f", "#7c3aed", "#0891b2", "#be185d"];
+  function $(id) { return document.getElementById(id); }
+  function desenharSaldo(kg, linhas, restante) {
+    var barra = $("saldo-barra"), legenda = $("saldo-legenda"), status = $("saldo-status");
+    barra.querySelectorAll(".seg").forEach(function (e) { e.remove(); });
+    legenda.innerHTML = ""; $("saldo-escala").innerHTML = "";
+    var falta = restante > 0.5 ? restante : 0, alocado = kg - falta;
+    var vazios = 0, vaziosKg = 0, semLimite = [];
+    linhas.forEach(function (l, i) {
+      l.cor = CORES[i % CORES.length];
+      l.usados = l.un + (l.parcial > 0 ? 1 : 0);
+      if (l.disp === null || isNaN(l.disp)) { semLimite.push(l); l.sobra = 0; l.sobraKg = 0; return; }
+      l.sobra = Math.max(0, l.disp - l.usados);
+      l.sobraKg = l.disp * l.cap - l.kg;  // inclui o espaço que falta no recipiente incompleto
+      vazios += l.sobra; vaziosKg += l.sobraKg;
+    });
+    $("s-chegou").textContent = kg ? fmt(kg, 0) + " kg" : "—";
+    $("s-alocado").textContent = kg ? fmt(alocado, 0) + " kg" : "—";
+    $("s-alocado-pct").textContent = kg ? fmt(alocado * 100 / kg, 0) + "% da carga" : "";
+    $("s-falta").textContent = kg ? fmt(falta, 0) + " kg" : "—";
+    var menor = linhas.slice().sort(function (a, b) { return a.cap - b.cap; })[0];
+    $("s-falta-un").textContent = falta && menor ? "≈ " + fmt(Math.ceil(falta / menor.cap), 0) + " × " + menor.nome + " a mais" : "";
+    $("s-vazios").textContent = linhas.length ? (semLimite.length && !vazios ? "sem limite" : fmt(vazios, 0) + " un.") : "—";
+    $("s-vazios-kg").textContent = vaziosKg > 0.5 ? "cabem mais " + fmt(vaziosKg, 0) + " kg" + (semLimite.length ? " (fora os sem limite)" : "") : "";
+
+    if (!kg || !linhas.length) {
+      status.className = "etiqueta cinza"; status.textContent = "Informe a quantidade e os recipientes";
+      $("saldo-marca").hidden = true; return;
+    }
+    if (falta) { status.className = "etiqueta vermelho"; status.textContent = "Faltam recipientes para " + fmt(falta, 0) + " kg"; }
+    else if (vaziosKg > 0.5) { status.className = "etiqueta verde"; status.textContent = "Tudo cabe · sobram " + fmt(vazios, 0) + " recipientes vazios"; }
+    else { status.className = "etiqueta verde"; status.textContent = "Tudo cabe" + (semLimite.length ? "" : ", sem sobra de recipiente"); }
+
+    var total = Math.max(kg, alocado + vaziosKg) || 1;
+    function seg(classe, valor, cor, dica) {
+      if (valor <= 0) return;
+      var d = document.createElement("div");
+      d.className = "seg " + classe; d.style.width = (valor * 100 / total) + "%";
+      if (cor) d.style.setProperty("--cor", cor);
+      d.dataset.dica = dica; d.tabIndex = 0;
+      barra.insertBefore(d, $("saldo-marca"));
+    }
+    var ordem = linhas.slice().sort(function (a, b) { return b.cap - a.cap; });
+    ordem.forEach(function (l) {
+      seg("cheio", l.kg, l.cor, "<b>" + l.nome + "</b><br>" + fmt(l.un, 0) + " cheios" + (l.parcial > 0 ? " + 1 com " + fmt(l.parcial, 0) + " kg" : "") + "<br>" + fmt(l.kg, 0) + " kg");
+    });
+    seg("falta", falta, null, "<b>Sem recipiente</b><br>" + fmt(falta, 0) + " kg sobram no caminhão");
+    ordem.forEach(function (l) {
+      seg("vazio", l.sobraKg, l.cor, "<b>" + l.nome + " vazios</b><br>" + fmt(l.sobra, 0) + " un. sobrando<br>cabem mais " + fmt(l.sobraKg, 0) + " kg");
+    });
+    var marca = $("saldo-marca");
+    marca.hidden = false; marca.style.left = (kg * 100 / total) + "%";
+    marca.classList.toggle("direita", kg / total > .85);
+    [0, .25, .5, .75, 1].forEach(function (f) {
+      var t = document.createElement("span"); t.style.left = (f * 100) + "%";
+      t.textContent = fmt(total * f / 1000, total < 10000 ? 1 : 0) + " t"; $("saldo-escala").appendChild(t);
+    });
+    ordem.forEach(function (l) {
+      var item = document.createElement("span");
+      item.innerHTML = '<i class="ponto" style="background:' + l.cor + '"></i>';
+      item.appendChild(document.createTextNode(l.nome + ": " + fmt(l.usados, 0) + (l.disp === null || isNaN(l.disp) ? "" : " de " + fmt(l.disp, 0)) + " usados"));
+      legenda.appendChild(item);
+    });
+  }
+
+  // Dica ao passar o mouse (ou tocar) em cada pedaço da barra
+  (function () {
+    var barra = $("saldo-barra"), dica = $("saldo-dica"), caixa = $("saldo-envase");
+    function mostrar(e) {
+      var s = e.target.closest(".seg"); if (!s) { dica.hidden = true; return; }
+      dica.innerHTML = s.dataset.dica; dica.hidden = false;
+      var r = s.getBoundingClientRect(), c = caixa.getBoundingClientRect();
+      var x = Math.min(Math.max(r.left + r.width / 2 - c.left, 90), c.width - 90);
+      dica.style.left = x + "px"; dica.style.top = (r.top - c.top) + "px";
+    }
+    barra.addEventListener("mousemove", mostrar);
+    barra.addEventListener("focusin", mostrar);
+    barra.addEventListener("click", mostrar);
+    barra.addEventListener("mouseleave", function () { dica.hidden = true; });
+    barra.addEventListener("focusout", function () { dica.hidden = true; });
+  })();
 
   function renumerar() {
     var n = 0;
