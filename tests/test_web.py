@@ -300,7 +300,7 @@ def test_grafico_soma_ordens_de_servico_sem_contar_duas_vezes(logado, dados):
         os_services.novo_item(os, TipoRecipiente.objects.get(nome="Tambor 200 L")).save()
         os_services.recalcular(os)
         item, luiz = os.itens.get(), User.objects.get(username="luiz")
-        os_services.apontar(os, luiz, "INICIO")
+        os_services.apontar(os, luiz, "INICIO", item=item)
         os_services.concluir(os, luiz, {item.pk: (20, Decimal("5000"))})
         os.refresh_from_db()
         return os

@@ -110,6 +110,12 @@ class OrdemServico(models.Model):
         help_text="Nota de prestação de serviço emitida no sistema emissor.",
     )
     data_faturamento = models.DateField(null=True, blank=True)
+    justificativa = models.TextField(
+        "justificativa da conclusão", blank=True,
+        help_text="Obrigatória quando a OS é concluída com menos envasado do que chegou.",
+    )
+    concluida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name="+")
     observacao = models.TextField("observação", blank=True)
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name="+")
@@ -215,7 +221,20 @@ class ItemOS(models.Model):
 
     @property
     def unidades_total_previstas(self) -> int:
+        """Recipientes que serão usados (os cheios + o incompleto, se houver)."""
         return self.unidades_previstas + (1 if self.parcial_kg > 0 else 0)
+
+    @property
+    def voltam_vazios(self) -> int | None:
+        """Quantos deste tipo o cliente trouxe e não serão usados (voltam vazios)."""
+        if self.disponivel is None:
+            return None
+        return max(0, self.disponivel - self.unidades_total_previstas)
+
+    @property
+    def contados(self) -> int:
+        """Recipientes cheios apontados pelos funcionários (toques em '+1 cheio')."""
+        return sum(a.quantidade for a in self.apontamentos.all() if a.evento == Apontamento.Evento.CHEIO)
 
     @property
     def valor_previsto(self) -> Decimal:
@@ -237,6 +256,8 @@ class Apontamento(models.Model):
         INICIO = "INICIO", "Início"
         PAUSA = "PAUSA", "Pausa"
         RETOMADA = "RETOMADA", "Retomada"
+        TROCA = "TROCA", "Trocou de recipiente"
+        CHEIO = "CHEIO", "Recipiente cheio"
         FIM = "FIM", "Fim"
 
     class Motivo(models.TextChoices):
@@ -252,6 +273,13 @@ class Apontamento(models.Model):
     funcionario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="apontamentos")
     evento = models.CharField(max_length=10, choices=Evento.choices)
     momento = models.DateTimeField()
+    item = models.ForeignKey(
+        "ItemOS", on_delete=models.SET_NULL, null=True, blank=True, related_name="apontamentos",
+        help_text="Recipiente em que o funcionário está trabalhando (início, retomada, troca) ou que encheu.",
+    )
+    quantidade = models.IntegerField(
+        default=0, help_text="Só em 'Recipiente cheio': +1 a cada recipiente cheio, −1 para desfazer um toque errado.",
+    )
     motivo = models.CharField(max_length=10, choices=Motivo.choices, blank=True)
     observacao = models.CharField("observação", max_length=200, blank=True)
     registrado_por = models.ForeignKey(

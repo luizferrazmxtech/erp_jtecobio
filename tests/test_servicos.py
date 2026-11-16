@@ -88,10 +88,10 @@ def test_os_calcula_fracionamento_e_valor(os_kemin):
 
 
 def test_apontamento_com_pausa_e_dois_funcionarios(os_kemin, joao, maria):
-    services.apontar(os_kemin, joao, "INICIO", momento=hora(8))
+    services.apontar(os_kemin, joao, "INICIO", item=os_kemin.itens.order_by("-capacidade_kg").first(), momento=hora(8))
     os_kemin.refresh_from_db()
     assert os_kemin.status == OrdemServico.Status.ANDAMENTO
-    services.apontar(os_kemin, maria, "INICIO", momento=hora(8, 30))
+    services.apontar(os_kemin, maria, "INICIO", item=os_kemin.itens.order_by("-capacidade_kg").first(), momento=hora(8, 30))
     services.apontar(os_kemin, joao, "PAUSA", "REFEICAO", momento=hora(9))
     with pytest.raises(ValidationError):  # pausado não pode pausar de novo
         services.apontar(os_kemin, joao, "PAUSA", "OUTRO", momento=hora(9, 5))
@@ -109,14 +109,14 @@ def test_apontamento_com_pausa_e_dois_funcionarios(os_kemin, joao, maria):
 
 
 def test_pausa_exige_motivo(os_kemin, joao):
-    services.apontar(os_kemin, joao, "INICIO", momento=hora(8))
+    services.apontar(os_kemin, joao, "INICIO", item=os_kemin.itens.order_by("-capacidade_kg").first(), momento=hora(8))
     with pytest.raises(ValidationError):
         services.apontar(os_kemin, joao, "PAUSA", momento=hora(8, 10))
 
 
 def test_concluir_fecha_quem_ficou_aberto_e_calcula_tmo(os_kemin, joao, maria):
-    services.apontar(os_kemin, joao, "INICIO", momento=timezone.now() - timedelta(minutes=56))
-    services.apontar(os_kemin, maria, "INICIO", momento=timezone.now() - timedelta(minutes=10))
+    services.apontar(os_kemin, joao, "INICIO", item=os_kemin.itens.order_by("-capacidade_kg").first(), momento=timezone.now() - timedelta(minutes=56))
+    services.apontar(os_kemin, maria, "INICIO", item=os_kemin.itens.order_by("-capacidade_kg").first(), momento=timezone.now() - timedelta(minutes=10))
     services.apontar(os_kemin, maria, "PAUSA", "CAMINHAO", momento=timezone.now() - timedelta(minutes=5))
     ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
     services.concluir(os_kemin, joao, {ibc.pk: (3, D("3780")), tambor.pk: (5, D("1220"))})
@@ -135,9 +135,9 @@ def test_concluir_fecha_quem_ficou_aberto_e_calcula_tmo(os_kemin, joao, maria):
     with pytest.raises(ValidationError):
         services.apontar(os_kemin, joao, "INICIO")
 
-    # TMO por tipo, repartido pelo tempo padrão: IBC leva 36/56 do tempo
+    # TMO por tipo: os dois apontaram no IBC, então todo o tempo é do IBC
     real = services.tmo_do_tipo(ibc.tipo)
-    assert real["unidades"] == 3 and real["tmo"] == (D("61.0") * 36 / 56 / 3).quantize(D("0.01"), "ROUND_HALF_UP")
+    assert real["unidades"] == 3 and real["tmo"] == (D("61") / 3).quantize(D("0.01"), "ROUND_HALF_UP")
 
     # Valor por mês para o painel
     mes = timezone.localtime(os_kemin.concluida_em).strftime("%Y-%m")
@@ -195,23 +195,39 @@ def test_operador_aponta_e_conclui(client, os_kemin, joao):
     assert client.get("/")["Location"] == "/servicos/operador/"  # vai direto para o apontamento
     assert "OS 1" in client.get("/servicos/operador/").content.decode()
 
-    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "INICIO"})
-    assert "Trabalhando" in client.get(f"/servicos/operador/{os_kemin.pk}/").content.decode()
-    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "PAUSA", "motivo": "REFEICAO"})
-    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "RETOMADA"})
-    client.post(f"/servicos/operador/{os_kemin.pk}/", {"evento": "FIM"})
-    assert list(os_kemin.apontamentos.values_list("evento", flat=True)) == ["INICIO", "PAUSA", "RETOMADA", "FIM"]
-    pagina = client.get(f"/servicos/operador/{os_kemin.pk}/").content.decode()
-    assert "Concluir OS" in pagina
-
     ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
-    resp = client.post(f"/servicos/{os_kemin.pk}/concluir/", {
-        "voltar": "operador", f"unidades_{ibc.pk}": "3", f"kg_{ibc.pk}": "", f"unidades_{tambor.pk}": "5", f"kg_{tambor.pk}": "",
-    })
+    url = f"/servicos/operador/{os_kemin.pk}/"
+    pagina = client.get(url).content.decode()
+    assert "O que envasar" in pagina and "Tambor 200 L" in pagina and "Começar aqui" in pagina
+
+    client.post(url, {"evento": "INICIO", "item": ibc.pk})
+    assert "Envasando IBC 1.000 L" in client.get(url).content.decode()
+    for _ in range(3):
+        client.post(url, {"evento": "CHEIO", "item": ibc.pk})
+    client.post(url, {"evento": "PAUSA", "motivo": "REFEICAO"})
+    client.post(url, {"evento": "RETOMADA"})
+    client.post(url, {"evento": "TROCA", "item": tambor.pk})
+    for _ in range(6):
+        client.post(url, {"evento": "CHEIO", "item": tambor.pk})
+    client.post(url, {"evento": "CHEIO", "item": tambor.pk, "quantidade": "-1"})  # tocou a mais
+    assert tambor.contados == 5 and ibc.contados == 3
+
+    # Antes de finalizar, ainda não aparece o concluir
+    assert "Concluir OS" not in client.get(url).content.decode()
+    client.post(url, {"evento": "FIM"})
+    pagina = client.get(url).content.decode()
+    assert "Tudo envasado" in pagina and "Concluir OS" in pagina
+
+    resp = client.post(f"/servicos/{os_kemin.pk}/concluir/", {"voltar": "operador"})
     assert resp["Location"] == "/servicos/operador/"
     os_kemin.refresh_from_db()
     assert os_kemin.status == OrdemServico.Status.CONCLUIDA
-    assert os_kemin.kg_envasado == D("5000")  # 3 IBC cheios + tambores limitados ao previsto
+    assert os_kemin.kg_envasado == D("5000")  # 3 IBC (3.780) + 5 tambores, o último com 212 kg
+    ibc.refresh_from_db(); tambor.refresh_from_db()
+    assert ibc.unidades_cheias == 3 and tambor.unidades_cheias == 5 and tambor.kg_realizado == D("1220")
+    # Tempo separado por recipiente
+    tmo = services.tmo_por_item(os_kemin)
+    assert set(tmo) == {ibc.pk, tambor.pk}
 
     # Operador não edita nem fatura
     assert client.post(f"/servicos/{os_kemin.pk}/faturar/").status_code == 403
@@ -221,7 +237,7 @@ def test_faturar_e_correcao_pelo_escritorio(logado, os_kemin, joao):
     agora = timezone.localtime()
     resp = logado.post(f"/servicos/{os_kemin.pk}/corrigir/", {
         "funcionario": joao.pk, "evento": "INICIO", "momento": (agora - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
-        "motivo": "", "observacao": "Esqueceu de apontar",
+        "motivo": "", "observacao": "Esqueceu de apontar", "item": os_kemin.itens.order_by("-capacidade_kg").first().pk,
     })
     assert resp.status_code == 302
     a = Apontamento.objects.get()
@@ -265,3 +281,56 @@ def test_busca_de_produto_traz_primeiro_os_do_cliente(logado, os_kemin):
     # A tela não manda mais a lista inteira de produtos
     pagina = logado.get("/servicos/nova/").content.decode()
     assert "Glicerina antiga" not in pagina and "/busca/produtos/" in pagina
+
+
+def test_operador_nao_conclui_com_falta(client, os_kemin, joao):
+    """Como no teste do Luiz: encheu 1 recipiente em segundos e tentou concluir."""
+    call_command("criar_perfis", stdout=io.StringIO())
+    joao.groups.add(Group.objects.get(name="Operação"))
+    client.force_login(joao)
+    ibc = os_kemin.itens.order_by("-capacidade_kg").first()
+    url = f"/servicos/operador/{os_kemin.pk}/"
+    client.post(url, {"evento": "INICIO", "item": ibc.pk})
+    client.post(url, {"evento": "CHEIO", "item": ibc.pk})
+    client.post(url, {"evento": "FIM"})
+    pagina = client.get(url).content.decode()
+    assert "Ainda faltam" in pagina and "avise o supervisor" in pagina
+    client.post(f"/servicos/{os_kemin.pk}/concluir/", {"voltar": "operador"})
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.ANDAMENTO
+
+
+def test_supervisor_conclui_com_falta_so_com_justificativa(logado, os_kemin, joao):
+    ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
+    services.apontar(os_kemin, joao, "INICIO", item=ibc, momento=timezone.now() - timedelta(seconds=30))
+    services.apontar(os_kemin, joao, "CHEIO", item=ibc)
+    dados = {f"unidades_{ibc.pk}": "1", f"kg_{ibc.pk}": "", f"unidades_{tambor.pk}": "0", f"kg_{tambor.pk}": ""}
+    logado.post(f"/servicos/{os_kemin.pk}/concluir/", dados)
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.ANDAMENTO  # sem justificativa, não conclui
+
+    logado.post(f"/servicos/{os_kemin.pk}/concluir/", {**dados, "justificativa": "Cliente levou o resto a granel"})
+    os_kemin.refresh_from_db()
+    assert os_kemin.status == OrdemServico.Status.CONCLUIDA and os_kemin.kg_envasado == D("1260")
+    assert os_kemin.justificativa == "Cliente levou o resto a granel"
+
+    # 30 s para 1 IBC (padrão 12 min) = tempo fora do normal: alerta e fora da média
+    ind = services.indicadores(os_kemin)
+    assert ind.alerta and services.tmo_do_tipo(ibc.tipo) is None
+    pagina = logado.get(f"/servicos/{os_kemin.pk}/").content.decode()
+    assert "Tempo fora do normal" in pagina and "Cliente levou o resto" in pagina
+
+
+def test_recipientes_que_voltam_vazios(logado, db):
+    cliente = Parceiro.objects.create(razao_social="Cliente X", eh_cliente=True)
+    octabin = TipoRecipiente.objects.get(nome="Octabin 1.000 kg")
+    tambor = TipoRecipiente.objects.get(nome="Tambor 200 L")
+    os = OrdemServico.objects.create(data=date(2026, 11, 16), cliente=cliente, descricao_produto="Glicerina",
+                                     quantidade_kg=D("12000"))
+    services.novo_item(os, octabin, 13).save()
+    services.novo_item(os, tambor, 4).save()
+    services.recalcular(os)
+    o, t = os.itens.order_by("-capacidade_kg")
+    assert o.unidades_total_previstas == 12 and o.voltam_vazios == 1 and t.voltam_vazios == 4
+    pagina = logado.get(f"/servicos/{os.pk}/").content.decode()
+    assert "voltam vazios para o cliente" in pagina and "4 × Tambor 200 L" in pagina

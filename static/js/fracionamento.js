@@ -108,7 +108,7 @@
     $("s-falta").textContent = kg ? fmt(falta, 0) + " kg" : "—";
     var menor = linhas.slice().sort(function (a, b) { return a.cap - b.cap; })[0];
     $("s-falta-un").textContent = falta && menor ? "≈ " + fmt(Math.ceil(falta / menor.cap), 0) + " × " + menor.nome + " a mais" : "";
-    $("s-vazios").textContent = linhas.length ? (semLimite.length && !vazios ? "sem limite" : fmt(vazios, 0) + " un.") : "—";
+    $("s-vazios").textContent = linhas.length ? (semLimite.length && !vazios ? "sem limite" : fmt(vazios, 0) + " recip.") : "—";
     $("s-vazios-kg").textContent = vaziosKg > 0.5 ? "cabem mais " + fmt(vaziosKg, 0) + " kg" + (semLimite.length ? " (fora os sem limite)" : "") : "";
 
     if (!kg || !linhas.length) {
@@ -116,7 +116,11 @@
       $("saldo-marca").hidden = true; return;
     }
     if (falta) { status.className = "etiqueta vermelho"; status.textContent = "Faltam recipientes para " + fmt(falta, 0) + " kg"; }
-    else if (vaziosKg > 0.5) { status.className = "etiqueta verde"; status.textContent = "Tudo cabe · sobram " + fmt(vazios, 0) + " recipientes vazios"; }
+    else if (vazios > 0) {
+      var lista = linhas.filter(function (l) { return l.sobra > 0; }).map(function (l) { return fmt(l.sobra, 0) + " " + l.nome; });
+      status.className = "etiqueta amarelo";
+      status.textContent = "Tudo cabe · voltam vazios ao cliente: " + lista.join(" e ");
+    }
     else { status.className = "etiqueta verde"; status.textContent = "Tudo cabe" + (semLimite.length ? "" : ", sem sobra de recipiente"); }
 
     var total = Math.max(kg, alocado + vaziosKg) || 1;
@@ -146,7 +150,9 @@
     ordem.forEach(function (l) {
       var item = document.createElement("span");
       item.innerHTML = '<i class="ponto" style="background:' + l.cor + '"></i>';
-      item.appendChild(document.createTextNode(l.nome + ": " + fmt(l.usados, 0) + (l.disp === null || isNaN(l.disp) ? "" : " de " + fmt(l.disp, 0)) + " usados"));
+      var txt = l.nome + ": usa " + fmt(l.usados, 0);
+      if (l.disp !== null && !isNaN(l.disp)) txt += " dos " + fmt(l.disp, 0) + " que trouxe" + (l.sobra ? " · " + fmt(l.sobra, 0) + " volta" + (l.sobra > 1 ? "m" : "") + " vazio" + (l.sobra > 1 ? "s" : "") : "");
+      item.appendChild(document.createTextNode(txt));
       legenda.appendChild(item);
     });
   }

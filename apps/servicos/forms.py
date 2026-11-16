@@ -7,7 +7,7 @@ from django.utils import timezone
 from apps.cadastros.models import Parceiro, Produto
 from apps.web.busca import BuscaSelect
 
-from .models import Apontamento, OrdemServico, TipoRecipiente
+from .models import Apontamento, ItemOS, OrdemServico, TipoRecipiente
 
 
 class OrdemServicoForm(forms.ModelForm):
@@ -80,11 +80,15 @@ class CorrecaoForm(forms.Form):
                                   input_formats=["%Y-%m-%dT%H:%M"])
     motivo = forms.ChoiceField(label="Motivo (se for pausa)", choices=[("", "—")] + Apontamento.Motivo.choices,
                                required=False)
+    item = forms.ModelChoiceField(label="Recipiente (início, troca ou cheio)", queryset=None, required=False,
+                                  empty_label="—")
     observacao = forms.CharField(label="Por que está corrigindo", max_length=200)
 
-    def __init__(self, *a, **k):
+    def __init__(self, *a, os=None, **k):
         from django.contrib.auth import get_user_model
 
         super().__init__(*a, **k)
+        self.fields["item"].queryset = os.itens.select_related("tipo") if os else ItemOS.objects.none()
+        self.fields["item"].label_from_instance = lambda i: i.tipo.nome
         self.fields["funcionario"].queryset = get_user_model().objects.filter(is_active=True).order_by("first_name", "username")
         self.fields["funcionario"].label_from_instance = lambda u: u.get_full_name() or u.username

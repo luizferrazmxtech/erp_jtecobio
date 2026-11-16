@@ -611,3 +611,4 @@ a.indicador:hover { text-decoration: none; border-color: var(--borda-forte); }
 @media (max-width: 760px) { .saldo-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .saldo-escala span { white-space: nowrap; }
 .saldo-marca.direita span { left: auto; right: 4px; }
+.amarelo-texto { color: var(--amarelo); }
