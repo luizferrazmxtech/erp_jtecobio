@@ -199,25 +199,28 @@ def detalhe(request, pk):
     os = get_object_or_404(OrdemServico.objects.select_related("cliente", "produto", "nota"), pk=pk)
     por_func = services.tempos(os)
     ind = services.indicadores(os, por_func)
-    itens = list(os.itens.select_related("tipo"))
+    itens = list(os.itens.select_related("tipo").prefetch_related("apontamentos"))
+    tmo_item = services.tmo_por_item(os, por_func)
+    for i in itens:
+        i.tmo_real = tmo_item.get(i.pk)
     return render(request, "servicos/detalhe.html", {
         "os": os, "itens": itens, "tempos": list(por_func.values()), "ind": ind,
+        "resumo": services.resumo_envase(os) if os.em_aberto else None,
+        "vazios": [(i.tipo.nome, i.voltam_vazios) for i in itens if i.voltam_vazios],
         "sobra": services.sobra_kg(os) if not os.concluida else ZERO,
         "pode_editar": request.user.has_perm(PODE_EDITAR),
         "notas": _notas_para_faturar(os) if os.status == OrdemServico.Status.CONCLUIDA else [],
-        "correcao": CorrecaoForm() if os.em_aberto else None,
-        "apontamentos": os.apontamentos.select_related("funcionario", "registrado_por"),
+        "correcao": CorrecaoForm(os=os) if os.em_aberto else None,
+        "apontamentos": os.apontamentos.select_related("funcionario", "registrado_por", "item__tipo"),
     })
 
 
 def _realizados(post, os):
+    """Unidades (e kg, se informado) de cada recipiente, do formulário do escritório."""
     realizados = {}
     for item in os.itens.all():
         unidades = _inteiro(post.get(f"unidades_{item.pk}")) or 0
-        kg = _decimal(post.get(f"kg_{item.pk}"))
-        if kg is None:
-            kg = min(unidades * item.capacidade_kg, item.kg_previsto) if unidades else ZERO
-        realizados[item.pk] = (unidades, kg)
+        realizados[item.pk] = (unidades, _decimal(post.get(f"kg_{item.pk}")))
     return realizados
 
 
@@ -229,8 +232,11 @@ def concluir(request, pk):
         messages.error(request, "Você não tem permissão para concluir OS.")
         return redirect(os)
     voltar = request.POST.get("voltar") == "operador"
+    supervisor = request.user.has_perm(PODE_EDITAR)
     try:
-        services.concluir(os, request.user, _realizados(request.POST, os))
+        # Na tela do operador vale o que foi apontado como cheio; no escritório, o que o supervisor informar.
+        realizados = None if voltar or not supervisor else _realizados(request.POST, os)
+        services.concluir(os, request.user, realizados, request.POST.get("justificativa", ""), pode_abaixo=supervisor)
         messages.success(request, f"{os} concluída. Obrigado!")
     except ValidationError as e:
         messages.error(request, e.messages[0])
@@ -283,12 +289,12 @@ def faturar(request, pk):
 def corrigir(request, pk):
     """Supervisor lança um apontamento com hora informada (esquecimento)."""
     os = get_object_or_404(OrdemServico, pk=pk)
-    form = CorrecaoForm(request.POST)
+    form = CorrecaoForm(request.POST, os=os)
     if form.is_valid():
         d = form.cleaned_data
         try:
             services.apontar(os, d["funcionario"], d["evento"], d["motivo"], d["observacao"],
-                             momento=d["momento"], registrado_por=request.user)
+                             momento=d["momento"], registrado_por=request.user, item=d.get("item"))
             messages.success(request, "Apontamento corrigido.")
         except ValidationError as e:
             messages.error(request, e.messages[0])
@@ -356,9 +362,13 @@ def operador_os(request, pk):
         if not request.user.has_perm(PODE_APONTAR):
             messages.error(request, "Você não tem permissão para apontar.")
             return redirect("servicos:operador_os", pk=pk)
+        item = None
+        if request.POST.get("item", "").isdigit():
+            item = get_object_or_404(ItemOS, pk=request.POST["item"], os=os)
         try:
             services.apontar(os, request.user, request.POST.get("evento", ""), request.POST.get("motivo", ""),
-                             request.POST.get("observacao", "")[:200])
+                             request.POST.get("observacao", "")[:200], item=item,
+                             quantidade=-1 if request.POST.get("quantidade") == "-1" else 1)
         except ValidationError as e:
             messages.error(request, e.messages[0])
         return redirect("servicos:operador_os", pk=pk)
@@ -367,11 +377,22 @@ def operador_os(request, pk):
     meu = por_func.get(request.user.pk) or services.Tempo(request.user)
     outros_ativos = [t for t in por_func.values() if t.funcionario.pk != request.user.pk
                      and t.situacao in (services.TRABALHANDO, services.PAUSADO)]
+    resumo = services.resumo_envase(os)
+    # Quem está em cada recipiente agora
+    equipe_item = {}
+    for t in por_func.values():
+        if t.situacao == services.TRABALHANDO and t.item_id:
+            equipe_item.setdefault(t.item_id, []).append(t.funcionario.get_full_name() or t.funcionario.username)
+    for linha in resumo["linhas"]:
+        linha["equipe"] = equipe_item.get(linha["item"].pk, [])
+        linha["meu"] = meu.item_id == linha["item"].pk and meu.situacao in (services.TRABALHANDO, services.PAUSADO)
+    item_atual = next((l for l in resumo["linhas"] if l["meu"]), None)
     return render(request, "servicos/operador_os.html", {
         "os": os, "meu": meu, "agora": agora, "outros": [t for t in por_func.values() if t.funcionario.pk != request.user.pk],
-        "itens": os.itens.select_related("tipo"), "motivos": Apontamento.Motivo.choices,
+        "resumo": resumo, "item_atual": item_atual, "motivos": Apontamento.Motivo.choices,
         "ind": services.indicadores(os, por_func),
         "pode_concluir": (os.em_aberto and meu.situacao == services.FINALIZADO and not outros_ativos),
+        "supervisor": request.user.has_perm(PODE_EDITAR),
         "so_operacao": so_operacao(request.user),
         "eventos": [a for a in meu.eventos][-8:],
     })

@@ -74,3 +74,25 @@ body.operador { background: var(--fundo); }
 .op-equipe > div span:first-child { flex: 1; }
 .op-aviso { background: var(--azul-claro); color: var(--azul); border-radius: 10px; padding: 12px 14px; margin: 0; }
 .op-topo form { margin: 0; }
+
+/* O que envasar (um cartão por recipiente) */
+.op-subtitulo { font-size: 19px; margin-top: 4px; }
+.op-progresso-geral { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 15px; }
+.op-barra { height: 10px; border-radius: 6px; background: var(--cinza-claro); overflow: hidden; }
+.op-barra > div { height: 100%; background: var(--verde); border-radius: 6px; transition: width .3s; }
+.op-itens { display: grid; gap: 12px; }
+.op-item { background: var(--cartao); border: 1px solid var(--borda); border-left: 6px solid var(--borda-forte); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.op-item.atual { border-left-color: var(--verde); box-shadow: 0 0 0 2px var(--verde-claro); }
+.op-item.feito { border-left-color: var(--azul); }
+.op-item.sem-meta { opacity: .8; }
+.op-item-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 18px; }
+.op-contagem { font-size: 16px; }
+.op-vazios { background: var(--amarelo-claro); color: #6e480c; border-radius: 8px; padding: 6px 10px; font-size: 14px; font-weight: 600; }
+.op-item-acoes { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.op-item-acoes form { display: contents; }
+.op-botao.cheio { background: var(--verde); font-size: 26px; min-height: 84px; }
+.op-botao.pequeno { min-height: 54px; font-size: 18px; }
+.op-botao.trocar { background: #fff; color: var(--texto); border: 2px solid var(--borda-forte); }
+.op-desfazer { width: 76px; border-radius: 14px; border: 2px solid var(--borda-forte); background: #fff; font: inherit; font-size: 22px; font-weight: 700; cursor: pointer; }
+.op-concluir textarea { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--borda-forte); border-radius: 10px; }
+.op-pausa[hidden] { display: none; }

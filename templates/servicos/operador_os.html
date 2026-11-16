@@ -6,31 +6,29 @@
   <div class="op-cab"><h1 class="op-titulo">OS {{ os.numero }}</h1>{% situacao os.status %}</div>
   <div class="op-cliente">{{ os.cliente }}</div>
   <div class="suave">{{ os.nome_produto }} · {{ os.quantidade_kg|kg }} kg{% if os.placa %} · placa {{ os.placa }}{% endif %}{% if os.lote %} · lote {{ os.lote }}{% endif %}</div>
-  <div class="op-recip">{% for i in itens %}<span><b>{{ i.unidades_previstas }}</b> × {{ i.tipo.nome }}{% if i.parcial_kg > 0 %} + 1 com {{ i.parcial_kg|kg }} kg{% endif %}</span>{% endfor %}</div>
-  <div class="pequeno suave">Tempo previsto: {{ ind.previsto_min|duracao }} de mão de obra</div>
+  <div class="op-progresso-geral">
+    <div class="op-barra"><div style="width:{{ resumo.pct }}%"></div></div>
+    <span><b>{{ resumo.envasado_kg|kg }}</b> de {{ os.quantidade_kg|kg }} kg envasados{% if resumo.falta_kg %} · faltam <b>{{ resumo.falta_kg|kg }} kg</b>{% endif %}</span>
+  </div>
 </div>
 
 {% if os.em_aberto %}
 <div class="op-relogio {{ meu.situacao }}" id="relogio" data-base="{{ meu.trabalhado|floatformat:'0'|unlocalize }}" data-rodando="{% if meu.situacao == 'trabalhando' %}1{% endif %}">
-  <span class="op-rotulo">{% if meu.situacao == "trabalhando" %}Trabalhando{% elif meu.situacao == "pausado" %}Pausado{% elif meu.situacao == "finalizado" %}Você finalizou{% else %}Você ainda não iniciou{% endif %}</span>
+  <span class="op-rotulo">{% if meu.situacao == "trabalhando" %}Envasando {{ item_atual.item.tipo.nome }}{% elif meu.situacao == "pausado" %}Pausado{% if item_atual %} · {{ item_atual.item.tipo.nome }}{% endif %}{% elif meu.situacao == "finalizado" %}Você finalizou{% else %}Escolha abaixo o que vai envasar{% endif %}</span>
   <b id="cronometro">{{ meu.trabalhado|duracao_seg }}</b>
   <span class="pequeno">seu tempo trabalhado nesta OS{% if meu.parado %} · parado {{ meu.parado|duracao_seg }}{% endif %}</span>
 </div>
 
+{% if meu.situacao == "trabalhando" or meu.situacao == "pausado" %}
 <div class="op-botoes">
-  {% if meu.situacao == "livre" or meu.situacao == "finalizado" %}
-    <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="INICIO"><button class="op-botao iniciar">{% icone "play" %} {% if meu.situacao == "finalizado" %}Voltar a trabalhar{% else %}Iniciar{% endif %}</button></form>
-  {% endif %}
   {% if meu.situacao == "trabalhando" %}
     <button type="button" class="op-botao pausar" id="abrir-pausa">{% icone "pausa" %} Pausar</button>
-  {% endif %}
-  {% if meu.situacao == "pausado" %}
+  {% else %}
     <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="RETOMADA"><button class="op-botao iniciar">{% icone "play" %} Retomar</button></form>
   {% endif %}
-  {% if meu.situacao == "trabalhando" or meu.situacao == "pausado" %}
-    <form method="post" onsubmit="return confirm('Finalizar o seu trabalho nesta OS?')">{% csrf_token %}<input type="hidden" name="evento" value="FIM"><button class="op-botao finalizar">{% icone "parar" %} Finalizar</button></form>
-  {% endif %}
+  <form method="post" onsubmit="return confirm('Finalizar o seu trabalho nesta OS?')">{% csrf_token %}<input type="hidden" name="evento" value="FIM"><button class="op-botao finalizar">{% icone "parar" %} Finalizar</button></form>
 </div>
+{% endif %}
 
 <form method="post" class="op-pausa" id="pausa" hidden>{% csrf_token %}
   <input type="hidden" name="evento" value="PAUSA">
@@ -40,22 +38,59 @@
   <button type="button" class="botao claro" id="fechar-pausa">Voltar</button>
 </form>
 
+<h2 class="op-subtitulo">O que envasar</h2>
+<div class="op-itens">
+{% for l in resumo.linhas %}{% with i=l.item %}
+  <div class="op-item{% if l.meu %} atual{% endif %}{% if l.meta and not l.faltam %} feito{% endif %}{% if not l.meta %} sem-meta{% endif %}">
+    <div class="op-item-cab">
+      <b>{{ i.tipo.nome }}</b>
+      {% if l.meu %}<span class="etiqueta verde">você está aqui</span>{% elif l.meta and not l.faltam %}<span class="etiqueta azul">pronto</span>{% endif %}
+    </div>
+    {% if l.meta %}
+      <div class="op-contagem"><b>{{ l.contados }}</b> de {{ l.meta }} cheios{% if l.faltam %} · faltam <b>{{ l.faltam }}</b>{% endif %}</div>
+      <div class="op-barra"><div style="width:{{ l.pct }}%"></div></div>
+      {% if i.parcial_kg > 0 %}<div class="pequeno suave">O último fica só com {{ i.parcial_kg|kg }} kg (incompleto).</div>{% endif %}
+    {% else %}
+      <div class="op-contagem">Não precisa encher: o produto acaba antes.{% if l.contados %} Apontados: {{ l.contados }}.{% endif %}</div>
+    {% endif %}
+    {% if i.voltam_vazios %}<div class="op-vazios">{{ i.voltam_vazios }} {{ i.tipo.nome }} volta{{ i.voltam_vazios|pluralize:"m" }} vazio{{ i.voltam_vazios|pluralize }} para o cliente</div>{% endif %}
+    {% if l.equipe %}<div class="pequeno">Trabalhando aqui: {{ l.equipe|join:", " }}</div>{% endif %}
+
+    {% if l.meu %}
+      <div class="op-item-acoes">
+        <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="CHEIO"><input type="hidden" name="item" value="{{ i.pk }}">
+          <button class="op-botao cheio">+1 cheio</button></form>
+        {% if l.contados %}<form method="post">{% csrf_token %}<input type="hidden" name="evento" value="CHEIO"><input type="hidden" name="item" value="{{ i.pk }}"><input type="hidden" name="quantidade" value="-1">
+          <button class="op-desfazer" title="Desfazer o último cheio">−1</button></form>{% endif %}
+      </div>
+    {% elif meu.situacao == "livre" or meu.situacao == "finalizado" %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="INICIO"><input type="hidden" name="item" value="{{ i.pk }}">
+        <button class="op-botao iniciar pequeno">{% icone "play" %} Começar aqui</button></form>
+    {% elif meu.situacao == "trabalhando" %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="TROCA"><input type="hidden" name="item" value="{{ i.pk }}">
+        <button class="op-botao trocar pequeno">{% icone "transferir" %} Passar para este</button></form>
+    {% endif %}
+  </div>
+{% endwith %}{% endfor %}
+</div>
+
 {% if pode_concluir %}
-{% localize off %}
 <form method="post" action="{% url 'servicos:concluir' os.pk %}" class="op-concluir">{% csrf_token %}
   <input type="hidden" name="voltar" value="operador">
-  <h2>Terminou a OS? Quantos recipientes foram enchidos?</h2>
-  <p class="pequeno suave">Conte também o recipiente que ficou incompleto. Se ninguém mais vai trabalhar nesta OS, confira e toque em Concluir.</p>
-  {% for i in itens %}
-  <div class="op-linha-concluir">
-    <span><b>{{ i.tipo.nome }}</b><span class="pequeno suave">previsto {{ i.unidades_total_previstas }}</span></span>
-    <input type="hidden" name="kg_{{ i.pk }}" value="">
-    <div class="op-contador"><button type="button" data-passo="-1">−</button><input name="unidades_{{ i.pk }}" value="{{ i.unidades_total_previstas }}" inputmode="numeric"><button type="button" data-passo="1">+</button></div>
-  </div>
-  {% endfor %}
-  <button class="op-botao concluir">{% icone "ok" %} Concluir OS</button>
+  {% if resumo.completo %}
+    <h2>Tudo envasado. Concluir a OS?</h2>
+    <p class="pequeno suave">{% for l in resumo.linhas %}{% if l.contados %}{{ l.contados }} × {{ l.item.tipo.nome }}{% if not forloop.last %} · {% endif %}{% endif %}{% endfor %}</p>
+    <button class="op-botao concluir">{% icone "ok" %} Concluir OS</button>
+  {% elif supervisor %}
+    <h2>Ainda faltam {{ resumo.falta_kg|kg }} kg</h2>
+    <p class="pequeno">Você é supervisor: pode concluir assim mesmo, explicando o motivo (ex.: o cliente levou o resto a granel).</p>
+    <textarea name="justificativa" rows="2" placeholder="Por que concluir sem envasar tudo?" required></textarea>
+    <button class="op-botao finalizar">{% icone "alerta" %} Concluir com falta</button>
+  {% else %}
+    <h2>Ainda faltam {{ resumo.falta_kg|kg }} kg</h2>
+    <p class="op-aviso">A OS só pode ser concluída quando todos os recipientes estiverem apontados como cheios. Se o envase parou de vez, avise o supervisor: ele conclui com uma justificativa.</p>
+  {% endif %}
 </form>
-{% endlocalize %}
 {% elif meu.situacao == "finalizado" %}
 <p class="op-aviso">Ainda tem colega trabalhando nesta OS. Quem terminar por último conclui a OS.</p>
 {% endif %}
@@ -71,7 +106,7 @@
 
 {% if eventos %}
 <div class="op-equipe"><h2>Seus apontamentos</h2>
-  {% for a in eventos %}<div><span>{{ a.momento|date:"H:i" }}</span><span>{{ a.get_evento_display }}{% if a.motivo %} · {{ a.get_motivo_display }}{% endif %}</span></div>{% endfor %}
+  {% for a in eventos %}<div><span>{{ a.momento|date:"H:i" }}</span><span>{{ a.get_evento_display }}{% if a.evento == "CHEIO" and a.quantidade < 0 %} (desfeito){% endif %}{% if a.item %} · {{ a.item.tipo.nome }}{% endif %}{% if a.motivo %} · {{ a.get_motivo_display }}{% endif %}</span></div>{% endfor %}
 </div>
 {% endif %}
 {% endblock %}
@@ -92,15 +127,9 @@
   if (abrir) abrir.addEventListener("click", function () { pausa.hidden = false; pausa.scrollIntoView({ behavior: "smooth" }); });
   var fechar = document.getElementById("fechar-pausa");
   if (fechar) fechar.addEventListener("click", function () { pausa.hidden = true; });
-  document.querySelectorAll(".op-contador button").forEach(function (b) {
-    b.addEventListener("click", function () {
-      var i = b.parentNode.querySelector("input");
-      i.value = Math.max(0, (parseInt(i.value, 10) || 0) + parseInt(b.dataset.passo, 10));
-    });
-  });
   // Mantém a tela atualizada quando outra pessoa aponta (a cada 60 s, se nada estiver aberto)
   setInterval(function () {
-    if ((!pausa || pausa.hidden) && !document.querySelector(".op-concluir")) location.reload();
+    if ((!pausa || pausa.hidden) && !document.querySelector(".op-concluir textarea")) location.reload();
   }, 60000);
 })();
 </script>
