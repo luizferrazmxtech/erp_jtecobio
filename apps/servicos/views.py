@@ -63,6 +63,17 @@ def _inteiro(texto):
     return int(t)
 
 
+def _inteiro_com_sinal(texto):
+    """Número inteiro que pode ser negativo (correção de contagem). Vazio = None."""
+    t = (texto or "").strip()
+    if not t:
+        return None
+    try:
+        return int(t)
+    except ValueError:
+        raise ValidationError(f"Quantidade inválida: {texto}")
+
+
 # ---------------------------------------------------------------------------
 # Lista
 # ---------------------------------------------------------------------------
@@ -95,8 +106,11 @@ def lista(request):
         "a_faturar": OrdemServico.objects.filter(status=OrdemServico.Status.CONCLUIDA).count(),
         "valor_mes": do_mes,
     }
+    pagina = Paginator(qs, 50).get_page(f.get("pagina"))
+    for os in pagina:
+        os.progresso = services.progresso(os) if os.status != OrdemServico.Status.CANCELADA else None
     return render(request, "servicos/lista.html", {
-        "pagina": Paginator(qs, 50).get_page(f.get("pagina")),
+        "pagina": pagina,
         "opcoes_status": OrdemServico.Status.choices, "contagem": contagem,
     })
 
@@ -205,6 +219,7 @@ def detalhe(request, pk):
         i.tmo_real = tmo_item.get(i.pk)
     return render(request, "servicos/detalhe.html", {
         "os": os, "itens": itens, "tempos": list(por_func.values()), "ind": ind,
+        "progresso": services.progresso(os, por_func) if os.status != OrdemServico.Status.CANCELADA else None,
         "resumo": services.resumo_envase(os) if os.em_aberto else None,
         "vazios": [(i.tipo.nome, i.voltam_vazios) for i in itens if i.voltam_vazios],
         "sobra": services.sobra_kg(os) if not os.concluida else ZERO,
@@ -294,7 +309,8 @@ def corrigir(request, pk):
         d = form.cleaned_data
         try:
             services.apontar(os, d["funcionario"], d["evento"], d["motivo"], d["observacao"],
-                             momento=d["momento"], registrado_por=request.user, item=d.get("item"))
+                             momento=d["momento"], registrado_por=request.user, item=d.get("item"),
+                             quantidade=d.get("quantidade") or 1)
             messages.success(request, "Apontamento corrigido.")
         except ValidationError as e:
             messages.error(request, e.messages[0])
@@ -347,6 +363,7 @@ def operador(request):
         meu = por_func.get(request.user.pk)
         cartoes.append({
             "os": os, "meu": meu, "situacao": meu.situacao if meu else services.LIVRE,
+            "progresso": services.progresso(os, por_func),
             "trabalhando": [t for t in por_func.values() if t.situacao == services.TRABALHANDO],
         })
     # As minhas primeiro (trabalhando, pausado), depois as livres
@@ -368,7 +385,8 @@ def operador_os(request, pk):
         try:
             services.apontar(os, request.user, request.POST.get("evento", ""), request.POST.get("motivo", ""),
                              request.POST.get("observacao", "")[:200], item=item,
-                             quantidade=-1 if request.POST.get("quantidade") == "-1" else 1)
+                             quantidade=_inteiro_com_sinal(request.POST.get("quantidade")) or 0,
+                             cheios=_inteiro_com_sinal(request.POST.get("cheios")))
         except ValidationError as e:
             messages.error(request, e.messages[0])
         return redirect("servicos:operador_os", pk=pk)
@@ -388,6 +406,8 @@ def operador_os(request, pk):
         linha["meu"] = meu.item_id == linha["item"].pk and meu.situacao in (services.TRABALHANDO, services.PAUSADO)
     item_atual = next((l for l in resumo["linhas"] if l["meu"]), None)
     return render(request, "servicos/operador_os.html", {
+        "trecho": services.trecho_atual(os, request.user, agora),
+        "progresso": services.progresso(os, por_func),
         "os": os, "meu": meu, "agora": agora, "outros": [t for t in por_func.values() if t.funcionario.pk != request.user.pk],
         "resumo": resumo, "item_atual": item_atual, "motivos": Apontamento.Motivo.choices,
         "ind": services.indicadores(os, por_func),

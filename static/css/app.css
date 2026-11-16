@@ -612,3 +612,28 @@ a.indicador:hover { text-decoration: none; border-color: var(--borda-forte); }
 .saldo-escala span { white-space: nowrap; }
 .saldo-marca.direita span { left: auto; right: 4px; }
 .amarelo-texto { color: var(--amarelo); }
+
+/* Progresso da OS de envase: kg envasado e mão de obra × prevista */
+.progresso-os { display: flex; flex-direction: column; gap: 3px; min-width: 150px; }
+.progresso-os .po-linha { display: grid; grid-template-columns: 44px 1fr 38px; align-items: center; gap: 6px; font-size: 11.5px; }
+.progresso-os .po-rotulo { color: var(--suave); }
+.progresso-os .po-linha b { text-align: right; font-variant-numeric: tabular-nums; }
+.progresso-os .po-barra { height: 8px; border-radius: 99px; background: var(--cinza-claro); overflow: hidden; }
+.progresso-os .po-barra > div { height: 100%; border-radius: 99px; transition: width .3s; }
+.progresso-os .po-kg { background: var(--azul); }
+.progresso-os .po-tempo { background: var(--verde); }
+.progresso-os.cinza .po-tempo { background: var(--borda-forte); }
+.progresso-os.amarelo .po-tempo { background: var(--amarelo); }
+.progresso-os.vermelho .po-tempo { background: var(--vermelho); }
+.progresso-os.amarelo .po-linha:last-of-type b, .progresso-os.amarelo .po-aviso { color: #8a5a10; }
+.progresso-os.vermelho .po-linha:last-of-type b, .progresso-os.vermelho .po-aviso { color: var(--vermelho); font-weight: 700; }
+.progresso-os.grande { gap: 5px; margin-top: 10px; }
+.progresso-os.grande .po-linha { grid-template-columns: 60px 1fr 46px; font-size: 14px; }
+.progresso-os.grande .po-barra { height: 14px; }
+.progresso-os .po-detalhe { font-size: 13px; color: var(--suave); margin: -2px 0 4px 66px; }
+tr.os-estourada td:first-child { box-shadow: inset 4px 0 0 var(--vermelho); }
+tr.os-atencao td:first-child { box-shadow: inset 4px 0 0 var(--amarelo); }
+.saldo-barra .seg.parcial { background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--cor) 55%, #fff) 0 4px, color-mix(in srgb, var(--cor) 40%, #fff) 4px 8px); border-left: 2px solid #fff; }
+.saldo-numeros.cinco { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 760px) { .saldo-numeros.cinco { grid-template-columns: repeat(2, minmax(0, 1fr)); } .progresso-os .po-detalhe { margin-left: 0; } }
+.ponto.parcial { background: repeating-linear-gradient(90deg, #8fc9b2 0 2px, #b9ddcf 2px 4px); }

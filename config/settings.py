@@ -79,6 +79,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "apps.web.contexto.exemplos",
+            "apps.web.contexto.versao_static",
             ],
         },
     },

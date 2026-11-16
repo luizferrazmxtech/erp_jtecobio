@@ -9,6 +9,7 @@
     <div class="op-cliente">{{ os.cliente }}</div>
     <div class="suave">{{ os.nome_produto }} · {{ os.quantidade_kg|kg }} kg{% if os.placa %} · placa {{ os.placa }}{% endif %}</div>
     <div class="op-recip">{% for i in os.itens.all %}<span>{{ i.unidades_total_previstas }} × {{ i.tipo.nome }}</span>{% endfor %}</div>
+    {% include "servicos/_progresso.html" with p=c.progresso %}
     {% if c.trabalhando %}<div class="pequeno">Trabalhando agora: {% for t in c.trabalhando %}{{ t.funcionario.get_full_name|default:t.funcionario.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
   </a>
 {% endwith %}{% empty %}

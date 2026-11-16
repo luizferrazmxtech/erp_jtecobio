@@ -192,14 +192,50 @@ def tempo_do_funcionario(os: OrdemServico, usuario, agora=None) -> Tempo:
     return tempos(os, agora).get(usuario.pk) or Tempo(usuario)
 
 
+# Eventos que encerram um trecho de trabalho: a tela pergunta quantos recipientes
+# o funcionário encheu desde o último início, retomada ou troca.
+PERGUNTA_CHEIOS = {Evento.PAUSA, Evento.TROCA, Evento.FIM}
+
+
+def _validar_contagem(item: ItemOS, quantidade: int):
+    """Contagem de cheios: não pode ficar negativa nem passar do que o cliente trouxe."""
+    total = item.contados + quantidade
+    if total < 0:
+        raise ValidationError(f"Só há {item.contados} {item.tipo} apontado(s) como cheio(s): não dá para tirar {-quantidade}.")
+    if item.disponivel is not None and total > item.disponivel:
+        raise ValidationError(f"O cliente trouxe {item.disponivel} {item.tipo}: com mais {quantidade} ficariam {total} cheios. "
+                              "Confira o número.")
+
+
+def trecho_atual(os: OrdemServico, usuario, agora=None) -> dict | None:
+    """O trecho que o funcionário está envasando agora, para perguntar quantos encheu.
+
+    {"item", "desde", "minutos", "sugestao"}: sugestao = minutos ÷ tempo padrão,
+    limitado ao que falta encher deste recipiente (só uma dica, ele confirma)."""
+    agora = agora or timezone.now()
+    t = tempo_do_funcionario(os, usuario, agora)
+    if t.situacao != TRABALHANDO or not t.item_id:
+        return None
+    item = os.itens.select_related("tipo").get(pk=t.item_id)
+    minutos = Decimal(str(max(0, (agora - t.desde).total_seconds()) / 60))
+    sugestao = 0
+    if item.tempo_padrao_min:
+        sugestao = int((minutos / item.tempo_padrao_min).to_integral_value(rounding=ROUND_DOWN))
+    faltam = max(0, item.unidades_total_previstas - item.contados)
+    return {"item": item, "desde": t.desde, "minutos": minutos, "sugestao": min(sugestao, faltam), "faltam": faltam}
+
+
 @transaction.atomic
 def apontar(os: OrdemServico, usuario, evento: str, motivo: str = "", observacao: str = "",
-            momento=None, registrado_por=None, item=None, quantidade: int = 1) -> Apontamento:
+            momento=None, registrado_por=None, item=None, quantidade: int = 1, cheios: int | None = None) -> Apontamento:
     """Grava um toque do funcionário. A hora é sempre a do sistema; só uma
     correção de supervisor (momento informado) grava outra hora.
 
     item: o recipiente da OS (obrigatório para iniciar, trocar e contar cheio).
-    quantidade: só para "Recipiente cheio" (+1, ou −1 para desfazer)."""
+    quantidade: só para "Recipiente cheio": quantos encheu (negativo corrige para menos).
+    cheios: ao pausar, trocar ou finalizar, quantos recipientes ele encheu no
+    trecho que está fechando. Vira um "Recipiente cheio" no recipiente em que
+    estava, na mesma hora, antes do evento."""
     os = OrdemServico.objects.select_for_update().get(pk=os.pk)
     if not os.em_aberto:
         raise ValidationError(f"A {os} está {os.get_status_display().lower()}: não aceita mais apontamentos.")
@@ -222,17 +258,30 @@ def apontar(os: OrdemServico, usuario, evento: str, motivo: str = "", observacao
     if evento == Evento.PAUSA and not motivo:
         raise ValidationError("Escolha o motivo da pausa.")
     if evento == Evento.CHEIO:
-        quantidade = 1 if quantidade >= 0 else -1
-        if quantidade < 0 and item.contados <= 0:
-            raise ValidationError("Não há recipiente cheio para desfazer.")
+        quantidade = int(quantidade or 0)
+        if not quantidade:
+            raise ValidationError("Informe quantos recipientes encheu.")
+        _validar_contagem(item, quantidade)
     else:
         quantidade = 0
+    item_cheios = None
+    if cheios:
+        if evento not in PERGUNTA_CHEIOS or atual.situacao != TRABALHANDO or not atual.item_id:
+            raise ValidationError("Os recipientes cheios são informados ao pausar, trocar ou finalizar.")
+        if cheios < 0:
+            raise ValidationError("A quantidade de recipientes cheios não pode ser negativa.")
+        item_cheios = os.itens.select_related("tipo").get(pk=atual.item_id)
+        _validar_contagem(item_cheios, cheios)
     if corrigido:
         ultimo = os.apontamentos.filter(funcionario=usuario).order_by("-momento").first()
         if ultimo and momento < ultimo.momento:
             raise ValidationError("A hora da correção é anterior ao último apontamento deste funcionário.")
         if momento > timezone.now():
             raise ValidationError("A hora da correção não pode estar no futuro.")
+    if item_cheios is not None:
+        Apontamento.objects.create(os=os, funcionario=usuario, evento=Evento.CHEIO, momento=momento, item=item_cheios,
+                                   quantidade=cheios, registrado_por=registrado_por or usuario, corrigido=corrigido,
+                                   observacao=f"Informado ao {Evento(evento).label.lower()}")
     a = Apontamento.objects.create(
         os=os, funcionario=usuario, evento=evento, momento=momento, motivo=motivo if evento == Evento.PAUSA else "",
         observacao=observacao, registrado_por=registrado_por or usuario, corrigido=corrigido,
@@ -277,6 +326,40 @@ def resumo_envase(os: OrdemServico) -> dict:
     falta_kg = max(ZERO, os.quantidade_kg - envasado)
     return {"linhas": linhas, "envasado_kg": envasado, "falta_kg": falta_kg, "completo": falta_kg < Decimal("0.5"),
             "pct": min(100, int(envasado * 100 / os.quantidade_kg)) if os.quantidade_kg else 0}
+
+
+# Cor do tempo de mão de obra: amarelo a partir de 80% do previsto, vermelho depois de 100%.
+TEMPO_ATENCAO = 80
+
+
+def progresso(os: OrdemServico, por_func=None) -> dict:
+    """Barra de progresso da OS: kg envasado × kg que chegou e mão de obra × prevista.
+
+    cor: "verde" (no tempo), "amarelo" (já usou 80% do tempo previsto e ainda
+    não terminou) ou "vermelho" (passou do tempo previsto)."""
+    por_func = por_func if por_func is not None else tempos(os)
+    if os.concluida:
+        envasado = os.kg_envasado or ZERO
+        previsto = sum(((i.unidades_cheias or 0) * i.tempo_padrao_min for i in os.itens.all()), ZERO) or os.minutos_previstos
+    else:
+        envasado = resumo_envase(os)["envasado_kg"]
+        previsto = os.minutos_previstos
+    homem = _min(sum(t.trabalhado for t in por_func.values()))
+    pct_kg = min(100, int(envasado * 100 / os.quantidade_kg)) if os.quantidade_kg else 0
+    pct_tempo = int(homem * 100 / previsto) if previsto else None
+    terminou = os.concluida or pct_kg >= 100
+    if pct_tempo is None or not homem:
+        cor = "cinza"
+    elif pct_tempo > 100:
+        cor = "vermelho"
+    elif pct_tempo >= TEMPO_ATENCAO and not terminou:
+        cor = "amarelo"
+    else:
+        cor = "verde"
+    textos = {"vermelho": f"passou {homem - previsto:.0f} min do previsto" if previsto else "",
+              "amarelo": "perto do tempo previsto", "verde": "dentro do tempo", "cinza": "não começou"}
+    return {"envasado_kg": envasado, "pct_kg": pct_kg, "homem_min": homem, "previsto_min": previsto,
+            "pct_tempo": pct_tempo, "pct_tempo_barra": min(100, pct_tempo or 0), "cor": cor, "texto": textos[cor]}
 
 
 @transaction.atomic

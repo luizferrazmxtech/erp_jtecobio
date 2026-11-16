@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v={{ versao_static }}">
   <script>try { if (localStorage.getItem("menu") === "fechado" && innerWidth > 900) document.documentElement.classList.add("pre-fechado"); } catch (e) {}</script>
 </head>
 <body>
@@ -132,7 +132,7 @@
   });
 })();
 </script>
-<script src="{% static 'js/busca.js' %}"></script>
+<script src="{% static 'js/busca.js' %}?v={{ versao_static }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

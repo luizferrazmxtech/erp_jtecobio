@@ -96,3 +96,24 @@ body.operador { background: var(--fundo); }
 .op-desfazer { width: 76px; border-radius: 14px; border: 2px solid var(--borda-forte); background: #fff; font: inherit; font-size: 22px; font-weight: 700; cursor: pointer; }
 .op-concluir textarea { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--borda-forte); border-radius: 10px; }
 .op-pausa[hidden] { display: none; }
+
+/* Pergunta "quantos encheu?" ao pausar, trocar ou finalizar */
+.op-contar { background: var(--cartao); border: 2px solid var(--verde); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.op-contar[hidden], .op-contar [hidden] { display: none; }
+.op-contar h2 { font-size: 19px; }
+.op-contar > div[data-para] { display: flex; flex-direction: column; gap: 12px; }
+.op-contador.grande { justify-content: center; gap: 12px; }
+.op-contador.grande input { width: 130px; height: 76px; font-size: 40px; }
+.op-contador.grande button { width: 76px; height: 76px; font-size: 38px; }
+.op-sugestao { margin-top: 6px; display: inline-block; border: 1px dashed var(--borda-forte); background: var(--cinza-claro); border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.op-obs { font: inherit; font-size: 17px; padding: 10px 12px; border: 1px solid var(--borda-forte); border-radius: 10px; }
+.op-corrigir { background: var(--cartao); border: 1px solid var(--borda); border-radius: 12px; padding: 10px 16px; }
+.op-corrigir summary { cursor: pointer; color: var(--suave); }
+.op-corrigir form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 10px; }
+.op-corrigir label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.op-corrigir select, .op-corrigir input { font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--borda-forte); border-radius: 8px; }
+.op-cartao .progresso-os { margin-top: 8px; }
+.op-contar > div[data-para][hidden] { display: none; }
+.op-contar { scroll-margin-top: 70px; }
+.op-contador input::-webkit-inner-spin-button, .op-contador input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.op-contador input[type=number] { -moz-appearance: textfield; }

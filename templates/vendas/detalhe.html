@@ -116,7 +116,7 @@
   <div class="rodape-tabela"><span id="p-resumo-rodape">Pedido de {{ pedido.quantidade_kg|kg }} kg</span><button class="botao">{% icone "ok" %} Salvar tanques</button></div>
 </form>
 {% endlocalize %}
-<script src="{% static 'js/rota.js' %}"></script>
+<script src="{% static 'js/rota.js' %}?v={{ versao_static }}"></script>
 {% else %}
 <div class="cartao mb">
   <div class="titulo"><div><h2>{% icone "tanque" %} <b>Tanques</b> do pedido</h2>{% if pedido.status == "CONF" %}<p>Quantidades reservadas: não podem ser vendidas em outro pedido.</p>{% endif %}</div></div>

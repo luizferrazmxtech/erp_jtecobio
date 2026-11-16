@@ -23,13 +23,14 @@
 
   <div class="secao">
     <h3 style="font-weight:300;font-size:18px">Recipientes que o cliente <b>trouxe</b></h3>
-    <p class="suave pequeno" style="margin:2px 0 14px">O sistema enche primeiro os maiores (menos recipientes = menos tempo) e respeita quantos o cliente trouxe de cada tipo. O que sobra vai num recipiente incompleto. O preço vem do cadastro e pode ser mudado só nesta OS. Falta um tipo? <a href="{% url 'web:adicionar' 'recipiente' %}">Cadastre um novo recipiente</a>.</p>
+    <p class="suave pequeno" style="margin:2px 0 14px">O sistema enche primeiro os maiores (menos recipientes = menos tempo) e respeita quantos o cliente trouxe de cada tipo. Como a carga quase nunca é múltiplo exato das capacidades, o resto vai num único recipiente incompleto (do menor tipo). O preço vem do cadastro e pode ser mudado só nesta OS. Falta um tipo? <a href="{% url 'web:adicionar' 'recipiente' %}">Cadastre um novo recipiente</a>.</p>
     {% for e in erros_recip %}<div class="aviso erro">{% icone "alerta" %}<div>{{ e }}</div></div>{% endfor %}
     <div class="saldo-envase" id="saldo-envase" aria-live="polite">
       <div class="saldo-cab"><h4>Saldo do envase</h4><span id="saldo-status" class="etiqueta cinza">Informe a quantidade e os recipientes</span></div>
-      <div class="saldo-numeros">
+      <div class="saldo-numeros cinco">
         <div><span>Chegou</span><b id="s-chegou">—</b></div>
         <div><span><i class="ponto alocado"></i>Vai nos recipientes</span><b id="s-alocado">—</b><small id="s-alocado-pct"></small></div>
+        <div><span><i class="ponto parcial"></i>Último incompleto</span><b id="s-parcial">—</b><small id="s-parcial-sub"></small></div>
         <div><span><i class="ponto falta"></i>Falta recipiente para</span><b id="s-falta">—</b><small id="s-falta-un"></small></div>
         <div><span><i class="ponto vazio"></i>Voltam vazios ao cliente</span><b id="s-vazios">—</b><small id="s-vazios-kg"></small></div>
       </div>
@@ -87,4 +88,4 @@
   </div>
 </form>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/fracionamento.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/fracionamento.js' %}?v={{ versao_static }}"></script>{% endblock %}

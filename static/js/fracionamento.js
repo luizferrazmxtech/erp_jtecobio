@@ -93,35 +93,40 @@
     barra.querySelectorAll(".seg").forEach(function (e) { e.remove(); });
     legenda.innerHTML = ""; $("saldo-escala").innerHTML = "";
     var falta = restante > 0.5 ? restante : 0, alocado = kg - falta;
-    var vazios = 0, vaziosKg = 0, semLimite = [];
+    var vazios = 0, vaziosKg = 0, semLimite = [], cheios = 0, incompleto = null;
     linhas.forEach(function (l, i) {
       l.cor = CORES[i % CORES.length];
       l.usados = l.un + (l.parcial > 0 ? 1 : 0);
+      cheios += l.un;
+      if (l.parcial > 0) incompleto = l;
       if (l.disp === null || isNaN(l.disp)) { semLimite.push(l); l.sobra = 0; l.sobraKg = 0; return; }
       l.sobra = Math.max(0, l.disp - l.usados);
-      l.sobraKg = l.disp * l.cap - l.kg;  // inclui o espaço que falta no recipiente incompleto
+      l.sobraKg = l.sobra * l.cap;  // só os recipientes inteiros que voltam vazios
       vazios += l.sobra; vaziosKg += l.sobraKg;
     });
     $("s-chegou").textContent = kg ? fmt(kg, 0) + " kg" : "—";
     $("s-alocado").textContent = kg ? fmt(alocado, 0) + " kg" : "—";
-    $("s-alocado-pct").textContent = kg ? fmt(alocado * 100 / kg, 0) + "% da carga" : "";
+    $("s-alocado-pct").textContent = kg ? fmt(cheios, 0) + " cheios" + (incompleto ? " + 1 incompleto" : "") : "";
+    $("s-parcial").textContent = incompleto ? fmt(incompleto.parcial, 0) + " kg" : (kg && linhas.length ? "nenhum" : "—");
+    $("s-parcial-sub").textContent = incompleto ? "num " + incompleto.nome + " (" + fmt(incompleto.parcial * 100 / incompleto.cap, 0) + "% cheio)" : "";
     $("s-falta").textContent = kg ? fmt(falta, 0) + " kg" : "—";
     var menor = linhas.slice().sort(function (a, b) { return a.cap - b.cap; })[0];
     $("s-falta-un").textContent = falta && menor ? "≈ " + fmt(Math.ceil(falta / menor.cap), 0) + " × " + menor.nome + " a mais" : "";
     $("s-vazios").textContent = linhas.length ? (semLimite.length && !vazios ? "sem limite" : fmt(vazios, 0) + " recip.") : "—";
-    $("s-vazios-kg").textContent = vaziosKg > 0.5 ? "cabem mais " + fmt(vaziosKg, 0) + " kg" + (semLimite.length ? " (fora os sem limite)" : "") : "";
+    $("s-vazios-kg").textContent = linhas.filter(function (l) { return l.sobra > 0; }).map(function (l) { return fmt(l.sobra, 0) + " " + l.nome; }).join(" · ");
 
     if (!kg || !linhas.length) {
       status.className = "etiqueta cinza"; status.textContent = "Informe a quantidade e os recipientes";
       $("saldo-marca").hidden = true; return;
     }
+    var resto = incompleto ? " · 1 " + incompleto.nome + " fica com " + fmt(incompleto.parcial, 0) + " kg" : "";
     if (falta) { status.className = "etiqueta vermelho"; status.textContent = "Faltam recipientes para " + fmt(falta, 0) + " kg"; }
     else if (vazios > 0) {
       var lista = linhas.filter(function (l) { return l.sobra > 0; }).map(function (l) { return fmt(l.sobra, 0) + " " + l.nome; });
       status.className = "etiqueta amarelo";
-      status.textContent = "Tudo cabe · voltam vazios ao cliente: " + lista.join(" e ");
+      status.textContent = "Tudo cabe" + resto + " · voltam vazios: " + lista.join(" e ");
     }
-    else { status.className = "etiqueta verde"; status.textContent = "Tudo cabe" + (semLimite.length ? "" : ", sem sobra de recipiente"); }
+    else { status.className = "etiqueta verde"; status.textContent = "Tudo cabe" + resto + (semLimite.length || resto ? "" : ", sem sobra de recipiente"); }
 
     var total = Math.max(kg, alocado + vaziosKg) || 1;
     function seg(classe, valor, cor, dica) {
@@ -134,11 +139,12 @@
     }
     var ordem = linhas.slice().sort(function (a, b) { return b.cap - a.cap; });
     ordem.forEach(function (l) {
-      seg("cheio", l.kg, l.cor, "<b>" + l.nome + "</b><br>" + fmt(l.un, 0) + " cheios" + (l.parcial > 0 ? " + 1 com " + fmt(l.parcial, 0) + " kg" : "") + "<br>" + fmt(l.kg, 0) + " kg");
+      seg("cheio", l.un * l.cap, l.cor, "<b>" + l.nome + "</b><br>" + fmt(l.un, 0) + " cheios<br>" + fmt(l.un * l.cap, 0) + " kg");
     });
+    if (incompleto) seg("parcial", incompleto.parcial, incompleto.cor, "<b>1 " + incompleto.nome + " incompleto</b><br>" + fmt(incompleto.parcial, 0) + " kg de " + fmt(incompleto.cap, 0) + "<br>é o resto da carga");
     seg("falta", falta, null, "<b>Sem recipiente</b><br>" + fmt(falta, 0) + " kg sobram no caminhão");
     ordem.forEach(function (l) {
-      seg("vazio", l.sobraKg, l.cor, "<b>" + l.nome + " vazios</b><br>" + fmt(l.sobra, 0) + " un. sobrando<br>cabem mais " + fmt(l.sobraKg, 0) + " kg");
+      seg("vazio", l.sobraKg, l.cor, "<b>" + fmt(l.sobra, 0) + " " + l.nome + " voltam vazios</b><br>o produto acaba antes");
     });
     var marca = $("saldo-marca");
     marca.hidden = false; marca.style.left = (kg * 100 / total) + "%";
@@ -150,8 +156,8 @@
     ordem.forEach(function (l) {
       var item = document.createElement("span");
       item.innerHTML = '<i class="ponto" style="background:' + l.cor + '"></i>';
-      var txt = l.nome + ": usa " + fmt(l.usados, 0);
-      if (l.disp !== null && !isNaN(l.disp)) txt += " dos " + fmt(l.disp, 0) + " que trouxe" + (l.sobra ? " · " + fmt(l.sobra, 0) + " volta" + (l.sobra > 1 ? "m" : "") + " vazio" + (l.sobra > 1 ? "s" : "") : "");
+      var txt = l.nome + ": " + fmt(l.un, 0) + " cheios" + (l.parcial > 0 ? " + 1 com " + fmt(l.parcial, 0) + " kg" : "");
+      if (l.disp !== null && !isNaN(l.disp)) txt += " · trouxe " + fmt(l.disp, 0) + (l.sobra ? " · " + fmt(l.sobra, 0) + " volta" + (l.sobra > 1 ? "m" : "") + " vazio" + (l.sobra > 1 ? "s" : "") : "");
       item.appendChild(document.createTextNode(txt));
       legenda.appendChild(item);
     });

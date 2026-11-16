@@ -1,0 +1,9 @@
+{% load erp %}{# Progresso da OS: kg envasado e mão de obra × prevista. Usa p = services.progresso(os). #}
+{% if p %}<div class="progresso-os{% if grande %} grande{% endif %} {{ p.cor }}" title="Envasado {{ p.envasado_kg|kg }} de {{ os.quantidade_kg|kg }} kg · mão de obra {{ p.homem_min|duracao }} de {{ p.previsto_min|duracao }} previstos">
+  <div class="po-linha"><span class="po-rotulo">Envase</span>
+    <div class="po-barra"><div class="po-kg" style="width:{{ p.pct_kg }}%"></div></div><b>{{ p.pct_kg }}%</b></div>
+  {% if grande %}<div class="po-detalhe"><b>{{ p.envasado_kg|kg }}</b> de {{ os.quantidade_kg|kg }} kg envasados</div>{% endif %}
+  <div class="po-linha"><span class="po-rotulo">Tempo</span>
+    <div class="po-barra"><div class="po-tempo" style="width:{{ p.pct_tempo_barra }}%"></div></div><b>{% if p.pct_tempo is not None %}{{ p.pct_tempo }}%{% else %}—{% endif %}</b></div>
+  {% if grande %}<div class="po-detalhe">{{ p.homem_min|duracao }} de mão de obra de {{ p.previsto_min|duracao }} previstos{% if p.texto %} · <span class="po-aviso">{{ p.texto }}</span>{% endif %}</div>{% endif %}
+</div>{% endif %}
