@@ -201,20 +201,27 @@ def test_operador_aponta_e_conclui(client, os_kemin, joao):
     assert "O que envasar" in pagina and "Tambor 200 L" in pagina and "Começar aqui" in pagina
 
     client.post(url, {"evento": "INICIO", "item": ibc.pk})
-    assert "Envasando IBC 1.000 L" in client.get(url).content.decode()
-    for _ in range(3):
-        client.post(url, {"evento": "CHEIO", "item": ibc.pk})
-    client.post(url, {"evento": "PAUSA", "motivo": "REFEICAO"})
+    pagina = client.get(url).content.decode()
+    assert "Envasando IBC 1.000 L" in pagina and "Quantos <b>IBC 1.000 L</b> você encheu" in pagina
+    assert "+1 cheio" not in pagina  # não aponta mais recipiente a recipiente
+    # Ao pausar, informa quantos encheu no trecho
+    client.post(url, {"evento": "PAUSA", "motivo": "REFEICAO", "cheios": "2"})
+    assert ibc.contados == 2
     client.post(url, {"evento": "RETOMADA"})
-    client.post(url, {"evento": "TROCA", "item": tambor.pk})
-    for _ in range(6):
-        client.post(url, {"evento": "CHEIO", "item": tambor.pk})
-    client.post(url, {"evento": "CHEIO", "item": tambor.pk, "quantidade": "-1"})  # tocou a mais
+    # Ao trocar de recipiente, a contagem vai para o recipiente que ele deixou
+    client.post(url, {"evento": "TROCA", "item": tambor.pk, "cheios": "1"})
+    assert ibc.contados == 3 and tambor.contados == 0
+    # Errou a contagem: corrige para mais ou para menos
+    client.post(url, {"evento": "CHEIO", "item": tambor.pk, "quantidade": "6"})
+    client.post(url, {"evento": "CHEIO", "item": tambor.pk, "quantidade": "-1"})
     assert tambor.contados == 5 and ibc.contados == 3
+    # Não deixa tirar mais do que foi contado
+    client.post(url, {"evento": "CHEIO", "item": ibc.pk, "quantidade": "-9"})
+    assert ibc.contados == 3
 
     # Antes de finalizar, ainda não aparece o concluir
     assert "Concluir OS" not in client.get(url).content.decode()
-    client.post(url, {"evento": "FIM"})
+    client.post(url, {"evento": "FIM", "cheios": "0"})
     pagina = client.get(url).content.decode()
     assert "Tudo envasado" in pagina and "Concluir OS" in pagina
 
@@ -291,8 +298,8 @@ def test_operador_nao_conclui_com_falta(client, os_kemin, joao):
     ibc = os_kemin.itens.order_by("-capacidade_kg").first()
     url = f"/servicos/operador/{os_kemin.pk}/"
     client.post(url, {"evento": "INICIO", "item": ibc.pk})
-    client.post(url, {"evento": "CHEIO", "item": ibc.pk})
-    client.post(url, {"evento": "FIM"})
+    client.post(url, {"evento": "FIM", "cheios": "1"})
+    assert ibc.contados == 1
     pagina = client.get(url).content.decode()
     assert "Ainda faltam" in pagina and "avise o supervisor" in pagina
     client.post(f"/servicos/{os_kemin.pk}/concluir/", {"voltar": "operador"})
@@ -334,3 +341,35 @@ def test_recipientes_que_voltam_vazios(logado, db):
     assert o.unidades_total_previstas == 12 and o.voltam_vazios == 1 and t.voltam_vazios == 4
     pagina = logado.get(f"/servicos/{os.pk}/").content.decode()
     assert "voltam vazios para o cliente" in pagina and "4 × Tambor 200 L" in pagina
+
+
+def test_progresso_e_tempo_estourado(os_kemin, joao):
+    """Barra de progresso: kg apontado × chegou; tempo fica vermelho ao passar do previsto."""
+    ibc, tambor = os_kemin.itens.order_by("-capacidade_kg")
+    p = services.progresso(os_kemin)
+    assert p["pct_kg"] == 0 and p["cor"] == "cinza"
+    previsto = os_kemin.minutos_previstos
+    inicio = timezone.now() - timedelta(minutes=float(previsto) * 0.9)
+    services.apontar(os_kemin, joao, "INICIO", item=ibc, momento=inicio)
+    p = services.progresso(os_kemin)
+    assert p["cor"] == "amarelo" and 85 <= p["pct_tempo"] <= 95
+    tempos = services.tempos(os_kemin, agora=inicio + timedelta(minutes=float(previsto) + 30))
+    p = services.progresso(os_kemin, tempos)
+    assert p["cor"] == "vermelho" and "passou" in p["texto"]
+    services.apontar(os_kemin, joao, "CHEIO", item=ibc, quantidade=3)
+    assert services.progresso(os_kemin)["pct_kg"] == int(D("3780") * 100 / os_kemin.quantidade_kg)
+
+
+def test_sugestao_de_cheios_pelo_tempo_padrao(os_kemin, joao):
+    ibc = os_kemin.itens.order_by("-capacidade_kg").first()  # padrão 12 min
+    agora = timezone.now()
+    services.apontar(os_kemin, joao, "INICIO", item=ibc, momento=agora - timedelta(minutes=30))
+    trecho = services.trecho_atual(os_kemin, joao, agora)
+    assert trecho["item"] == ibc and trecho["sugestao"] == 2
+    # Não passa do que o cliente trouxe
+    ibc.disponivel = 3
+    ibc.save()
+    with pytest.raises(ValidationError):
+        services.apontar(os_kemin, joao, "PAUSA", motivo="REFEICAO", cheios=4)
+    services.apontar(os_kemin, joao, "PAUSA", motivo="REFEICAO", cheios=2)
+    assert ibc.contados == 2

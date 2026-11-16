@@ -6,10 +6,7 @@
   <div class="op-cab"><h1 class="op-titulo">OS {{ os.numero }}</h1>{% situacao os.status %}</div>
   <div class="op-cliente">{{ os.cliente }}</div>
   <div class="suave">{{ os.nome_produto }} · {{ os.quantidade_kg|kg }} kg{% if os.placa %} · placa {{ os.placa }}{% endif %}{% if os.lote %} · lote {{ os.lote }}{% endif %}</div>
-  <div class="op-progresso-geral">
-    <div class="op-barra"><div style="width:{{ resumo.pct }}%"></div></div>
-    <span><b>{{ resumo.envasado_kg|kg }}</b> de {{ os.quantidade_kg|kg }} kg envasados{% if resumo.falta_kg %} · faltam <b>{{ resumo.falta_kg|kg }} kg</b>{% endif %}</span>
-  </div>
+  {% include "servicos/_progresso.html" with p=progresso grande=True %}
 </div>
 
 {% if os.em_aberto %}
@@ -22,21 +19,40 @@
 {% if meu.situacao == "trabalhando" or meu.situacao == "pausado" %}
 <div class="op-botoes">
   {% if meu.situacao == "trabalhando" %}
-    <button type="button" class="op-botao pausar" id="abrir-pausa">{% icone "pausa" %} Pausar</button>
+    <button type="button" class="op-botao pausar" data-abrir="PAUSA">{% icone "pausa" %} Pausar</button>
+    <button type="button" class="op-botao finalizar" data-abrir="FIM">{% icone "parar" %} Finalizar</button>
   {% else %}
     <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="RETOMADA"><button class="op-botao iniciar">{% icone "play" %} Retomar</button></form>
+    <form method="post" onsubmit="return confirm('Finalizar o seu trabalho nesta OS?')">{% csrf_token %}<input type="hidden" name="evento" value="FIM"><button class="op-botao finalizar">{% icone "parar" %} Finalizar</button></form>
   {% endif %}
-  <form method="post" onsubmit="return confirm('Finalizar o seu trabalho nesta OS?')">{% csrf_token %}<input type="hidden" name="evento" value="FIM"><button class="op-botao finalizar">{% icone "parar" %} Finalizar</button></form>
 </div>
 {% endif %}
 
-<form method="post" class="op-pausa" id="pausa" hidden>{% csrf_token %}
-  <input type="hidden" name="evento" value="PAUSA">
-  <h2>Por que vai pausar?</h2>
-  <div class="op-motivos">{% for v, n in motivos %}<button name="motivo" value="{{ v }}" class="op-motivo">{{ n }}</button>{% endfor %}</div>
-  <input name="observacao" placeholder="Observação (opcional)" maxlength="200">
-  <button type="button" class="botao claro" id="fechar-pausa">Voltar</button>
+{% if trecho %}
+{# Ao pausar, trocar ou finalizar: quantos recipientes encheu neste trecho #}
+<form method="post" class="op-contar" id="contar" hidden>{% csrf_token %}
+  <input type="hidden" name="evento" id="contar-evento">
+  <input type="hidden" name="item" id="contar-item">
+  <h2>Quantos <b>{{ trecho.item.tipo.nome }}</b> você encheu desde as {{ trecho.desde|date:"H:i" }}?</h2>
+  <div class="op-contador grande">
+    <button type="button" data-passo="-1" aria-label="Menos um">−</button>
+    <input name="cheios" id="cheios" type="number" inputmode="numeric" min="0" {% if trecho.item.disponivel is not None %}max="{{ trecho.item.disponivel }}"{% endif %} required placeholder="?">
+    <button type="button" data-passo="1" aria-label="Mais um">+</button>
+  </div>
+  <p class="pequeno suave">Conte os recipientes que ficaram <b>cheios e fechados</b>; o que está pela metade entra na próxima contagem.
+    {% if trecho.faltam %}Faltam {{ trecho.faltam }} deste tipo.{% endif %}
+    {% if trecho.sugestao %}<button type="button" class="op-sugestao" data-valor="{{ trecho.sugestao }}">Pelo tempo padrão seriam uns {{ trecho.sugestao }}</button>{% endif %}</p>
+
+  <div data-para="PAUSA" hidden>
+    <h2>Por que vai pausar?</h2>
+    <div class="op-motivos">{% for v, n in motivos %}<button name="motivo" value="{{ v }}" class="op-motivo">{{ n }}</button>{% endfor %}</div>
+    <input name="observacao" class="op-obs" placeholder="Observação (opcional)" maxlength="200">
+  </div>
+  <div data-para="FIM" hidden><button class="op-botao finalizar">{% icone "parar" %} Confirmar e finalizar</button></div>
+  <div data-para="TROCA" hidden><button class="op-botao trocar">{% icone "transferir" %} Confirmar e passar para <span id="contar-destino"></span></button></div>
+  <button type="button" class="botao claro" id="fechar-contar">Voltar</button>
 </form>
+{% endif %}
 
 <h2 class="op-subtitulo">O que envasar</h2>
 <div class="op-itens">
@@ -57,22 +73,26 @@
     {% if l.equipe %}<div class="pequeno">Trabalhando aqui: {{ l.equipe|join:", " }}</div>{% endif %}
 
     {% if l.meu %}
-      <div class="op-item-acoes">
-        <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="CHEIO"><input type="hidden" name="item" value="{{ i.pk }}">
-          <button class="op-botao cheio">+1 cheio</button></form>
-        {% if l.contados %}<form method="post">{% csrf_token %}<input type="hidden" name="evento" value="CHEIO"><input type="hidden" name="item" value="{{ i.pk }}"><input type="hidden" name="quantidade" value="-1">
-          <button class="op-desfazer" title="Desfazer o último cheio">−1</button></form>{% endif %}
-      </div>
+      <div class="pequeno suave">Ao pausar, trocar ou finalizar, o sistema pergunta quantos você encheu.</div>
     {% elif meu.situacao == "livre" or meu.situacao == "finalizado" %}
       <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="INICIO"><input type="hidden" name="item" value="{{ i.pk }}">
         <button class="op-botao iniciar pequeno">{% icone "play" %} Começar aqui</button></form>
     {% elif meu.situacao == "trabalhando" %}
-      <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="TROCA"><input type="hidden" name="item" value="{{ i.pk }}">
-        <button class="op-botao trocar pequeno">{% icone "transferir" %} Passar para este</button></form>
+      <button type="button" class="op-botao trocar pequeno" data-abrir="TROCA" data-item="{{ i.pk }}" data-nome="{{ i.tipo.nome }}">{% icone "transferir" %} Passar para este</button>
     {% endif %}
   </div>
 {% endwith %}{% endfor %}
 </div>
+
+{% if meu.situacao == "trabalhando" or meu.situacao == "pausado" %}
+<details class="op-corrigir"><summary>Errou a contagem? Corrigir</summary>
+  <form method="post">{% csrf_token %}<input type="hidden" name="evento" value="CHEIO">
+    <label>Recipiente <select name="item">{% for l in resumo.linhas %}<option value="{{ l.item.pk }}" {% if l.meu %}selected{% endif %}>{{ l.item.tipo.nome }} ({{ l.contados }} cheios)</option>{% endfor %}</select></label>
+    <label>Somar ou tirar <input name="quantidade" type="number" inputmode="numeric" required placeholder="ex.: 2 ou -1"></label>
+    <button class="botao">Corrigir</button>
+  </form>
+</details>
+{% endif %}
 
 {% if pode_concluir %}
 <form method="post" action="{% url 'servicos:concluir' os.pk %}" class="op-concluir">{% csrf_token %}
@@ -106,7 +126,7 @@
 
 {% if eventos %}
 <div class="op-equipe"><h2>Seus apontamentos</h2>
-  {% for a in eventos %}<div><span>{{ a.momento|date:"H:i" }}</span><span>{{ a.get_evento_display }}{% if a.evento == "CHEIO" and a.quantidade < 0 %} (desfeito){% endif %}{% if a.item %} · {{ a.item.tipo.nome }}{% endif %}{% if a.motivo %} · {{ a.get_motivo_display }}{% endif %}</span></div>{% endfor %}
+  {% for a in eventos %}<div><span>{{ a.momento|date:"H:i" }}</span><span>{{ a.get_evento_display }}{% if a.evento == "CHEIO" %}: {{ a.quantidade }}{% endif %}{% if a.item %} · {{ a.item.tipo.nome }}{% endif %}{% if a.motivo %} · {{ a.get_motivo_display }}{% endif %}</span></div>{% endfor %}
 </div>
 {% endif %}
 {% endblock %}
@@ -123,13 +143,38 @@
     }
     tic(); setInterval(tic, 1000);
   }
-  var pausa = document.getElementById("pausa"), abrir = document.getElementById("abrir-pausa");
-  if (abrir) abrir.addEventListener("click", function () { pausa.hidden = false; pausa.scrollIntoView({ behavior: "smooth" }); });
-  var fechar = document.getElementById("fechar-pausa");
-  if (fechar) fechar.addEventListener("click", function () { pausa.hidden = true; });
+  // Pausar / Finalizar / Passar para outro: abre a pergunta "quantos encheu?"
+  var contar = document.getElementById("contar");
+  function abrir(evento, botao) {
+    if (!contar) return;
+    document.getElementById("contar-evento").value = evento;
+    document.getElementById("contar-item").value = evento === "TROCA" ? botao.dataset.item : "";
+    if (evento === "TROCA") document.getElementById("contar-destino").textContent = botao.dataset.nome;
+    contar.querySelectorAll("[data-para]").forEach(function (d) { d.hidden = d.dataset.para !== evento; });
+    contar.hidden = false;
+    contar.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("cheios").focus({ preventScroll: true });
+  }
+  document.querySelectorAll("[data-abrir]").forEach(function (b) {
+    b.addEventListener("click", function () { abrir(b.dataset.abrir, b); });
+  });
+  if (contar) {
+    var campo = document.getElementById("cheios");
+    contar.querySelectorAll("[data-passo]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var v = Math.max(0, (parseInt(campo.value, 10) || 0) + parseInt(b.dataset.passo, 10));
+        if (campo.max) v = Math.min(v, parseInt(campo.max, 10));
+        campo.value = v;
+      });
+    });
+    var sug = contar.querySelector(".op-sugestao");
+    if (sug) sug.addEventListener("click", function () { campo.value = sug.dataset.valor; });
+    document.getElementById("fechar-contar").addEventListener("click", function () { contar.hidden = true; });
+  }
   // Mantém a tela atualizada quando outra pessoa aponta (a cada 60 s, se nada estiver aberto)
   setInterval(function () {
-    if ((!pausa || pausa.hidden) && !document.querySelector(".op-concluir textarea")) location.reload();
+    var ocupado = (contar && !contar.hidden) || document.querySelector(".op-concluir textarea") || document.querySelector(".op-corrigir[open]");
+    if (!ocupado) location.reload();
   }, 60000);
 })();
 </script>

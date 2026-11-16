@@ -233,7 +233,7 @@ class ItemOS(models.Model):
 
     @property
     def contados(self) -> int:
-        """Recipientes cheios apontados pelos funcionários (toques em '+1 cheio')."""
+        """Recipientes cheios apontados pelos funcionários (informados ao pausar, trocar ou finalizar)."""
         return sum(a.quantidade for a in self.apontamentos.all() if a.evento == Apontamento.Evento.CHEIO)
 
     @property
@@ -278,7 +278,7 @@ class Apontamento(models.Model):
         help_text="Recipiente em que o funcionário está trabalhando (início, retomada, troca) ou que encheu.",
     )
     quantidade = models.IntegerField(
-        default=0, help_text="Só em 'Recipiente cheio': +1 a cada recipiente cheio, −1 para desfazer um toque errado.",
+        default=0, help_text="Só em 'Recipiente cheio': quantos o funcionário encheu no trecho (informado ao pausar, trocar ou finalizar); negativo corrige a contagem.",
     )
     motivo = models.CharField(max_length=10, choices=Motivo.choices, blank=True)
     observacao = models.CharField("observação", max_length=200, blank=True)

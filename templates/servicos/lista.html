@@ -29,18 +29,19 @@
 </form>
 <div class="cartao">
   <div class="tabela-caixa"><table class="tabela">
-    <thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>Produto</th><th>Recipientes</th><th class="num">kg</th><th class="num">Valor (R$)</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
+    <thead><tr><th>Nº</th><th>Cliente</th><th>Data</th><th>Produto</th><th>Recipientes</th><th class="num">kg</th><th class="num">Valor (R$)</th><th>Progresso</th><th>Situação</th><th class="acoes">Ações</th></tr></thead>
     <tbody>{% for os in pagina %}
-      <tr><td><a class="forte" href="{{ os.get_absolute_url }}">{{ os.numero }}</a>{% if os.pedido_cliente %}<span class="sub">OC {{ os.pedido_cliente }}</span>{% endif %}</td>
+      <tr class="{% if os.progresso.cor == 'vermelho' %}os-estourada{% elif os.progresso.cor == 'amarelo' %}os-atencao{% endif %}"><td><a class="forte" href="{{ os.get_absolute_url }}">{{ os.numero }}</a>{% if os.pedido_cliente %}<span class="sub">OC {{ os.pedido_cliente }}</span>{% endif %}</td>
         <td><a class="forte" href="{% url 'web:parceiro' os.cliente_id %}">{{ os.cliente.razao_social|truncatechars:38 }}</a>{% if os.placa %}<span class="sub">placa {{ os.placa }}</span>{% endif %}</td>
         <td class="nowrap">{{ os.data|date:"d/m/Y" }}</td>
         <td>{{ os.nome_produto|truncatechars:30 }}</td>
         <td>{% for i in os.itens.all %}{% if os.concluida %}{{ i.unidades_cheias|default:0 }}{% else %}{{ i.unidades_total_previstas }}{% endif %} × {{ i.tipo.nome }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
         <td class="num">{% if os.kg_envasado %}{{ os.kg_envasado|kg }}{% else %}{{ os.quantidade_kg|kg }}{% endif %}</td>
         <td class="num">{{ os.valor|brl }}{% if not os.concluida %}<span class="sub">previsto</span>{% endif %}</td>
+        <td>{% include "servicos/_progresso.html" with p=os.progresso %}</td>
         <td>{% situacao os.status %}</td>
         <td class="acoes"><span class="acoes-linha"><a class="acao" title="Ver" href="{{ os.get_absolute_url }}">{% icone "buscar" %}</a>{% if os.em_aberto %}<a class="acao" title="Apontar" href="{% url 'servicos:operador_os' os.pk %}">{% icone "relogio" %}</a>{% endif %}</span></td></tr>
-    {% empty %}<tr><td colspan="9" class="vazio">Nenhuma ordem de serviço encontrada.</td></tr>{% endfor %}</tbody>
+    {% empty %}<tr><td colspan="10" class="vazio">Nenhuma ordem de serviço encontrada.</td></tr>{% endfor %}</tbody>
   </table></div>
   {% include "web/_paginacao.html" %}
 </div>

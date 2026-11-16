@@ -82,6 +82,8 @@ class CorrecaoForm(forms.Form):
                                required=False)
     item = forms.ModelChoiceField(label="Recipiente (início, troca ou cheio)", queryset=None, required=False,
                                   empty_label="—")
+    quantidade = forms.IntegerField(label="Quantos cheios (se for recipiente cheio)", required=False,
+                                    help_text="Negativo para tirar da contagem (ex.: −2).")
     observacao = forms.CharField(label="Por que está corrigindo", max_length=200)
 
     def __init__(self, *a, os=None, **k):

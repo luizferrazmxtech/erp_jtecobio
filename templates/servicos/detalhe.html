@@ -37,16 +37,25 @@
 {% if os.justificativa %}<div class="aviso">{% icone "alerta" %}<div><b>Concluída com {{ os.kg_envasado|kg }} de {{ os.quantidade_kg|kg }} kg envasados</b>{% if os.concluida_por %} por {{ os.concluida_por.get_full_name|default:os.concluida_por.username }}{% endif %}. Justificativa: {{ os.justificativa }}</div></div>{% endif %}
 {% if ind.alerta %}<div class="aviso erro">{% icone "alerta" %}<div><b>Tempo fora do normal.</b> {{ ind.alerta }} Esta OS não entra na média de TMO dos recipientes.</div></div>{% endif %}
 
+{% if progresso and os.status != "ABERTA" %}
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "relogio" %} Progresso do <b>envase</b></h2>
+    <p>Envase: kg nos recipientes {% if os.concluida %}cheios{% else %}já apontados como cheios{% endif %} sobre o que chegou. Tempo: mão de obra apontada sobre a prevista pelo tempo padrão. A barra de tempo fica amarela a partir de 80% (sem terminar) e vermelha quando passa do previsto.</p></div></div>
+  <div class="corpo">{% include "servicos/_progresso.html" with p=progresso grande=True %}</div>
+</div>
+{% endif %}
+
 <div class="cartao mb">
   <div class="titulo"><div><h2>{% icone "envase" %} <b>Fracionamento</b></h2>
     <p>Previsto pelo sistema (maiores primeiro, respeitando quantos o cliente trouxe){% if os.concluida %} e o que foi cheio de fato{% else %} e o que os funcionários já apontaram como cheio{% endif %}.</p></div></div>
+  {% for i in itens %}{% if i.parcial_kg > 0 %}<div class="corpo" style="padding-bottom:0"><div class="aviso">{% icone "envase" %}<div><b>Um {{ i.tipo.nome }} fica incompleto, com {{ i.parcial_kg|kg }} kg</b> (de {{ i.capacidade_kg|kg }} kg). É o resto da carga que não completa um recipiente: {{ os.quantidade_kg|kg }} kg não é múltiplo exato das capacidades. Ele é cobrado normalmente pelos kg.</div></div></div>{% endif %}{% endfor %}
   {% if vazios %}<div class="corpo" style="padding-bottom:0"><div class="aviso">{% icone "envase" %}<div><b>O cliente trouxe recipientes a mais.</b> O produto acaba antes; voltam vazios para o cliente: {% for nome, n in vazios %}<b>{{ n }} × {{ nome }}</b>{% if not forloop.last %}, {% endif %}{% endfor %}.</div></div></div>{% endif %}
   {% if sobra > 0 %}<div class="corpo" style="padding-bottom:0"><div class="aviso erro">{% icone "alerta" %}<div><b>{{ sobra|kg }} kg</b> não cabem nos recipientes informados.{% if os.editavel %} <a href="{% url 'servicos:editar' os.pk %}">Edite a OS</a> para incluir mais recipientes.{% endif %}</div></div></div>{% endif %}
   <div class="tabela-caixa"><table class="tabela">
     <thead><tr><th>Recipiente</th><th class="num">Capacidade (kg)</th><th class="num">Trouxe</th><th class="num">Vai usar</th><th class="num">Volta vazio</th><th class="num">kg previsto</th><th class="num">R$/kg</th><th class="num">Tempo padrão</th><th class="num">{% if os.concluida %}Cheios{% else %}Apontados{% endif %}</th>{% if os.concluida %}<th class="num">kg envasado</th>{% endif %}<th class="num">TMO real</th><th class="num">Valor (R$)</th></tr></thead>
     <tbody>{% for i in itens %}
       <tr><td><b>{{ i.tipo.nome }}</b></td><td class="num">{{ i.capacidade_kg|kg }}</td><td class="num">{{ i.disponivel|default:"sem limite" }}</td>
-        <td class="num">{{ i.unidades_total_previstas }}{% if i.parcial_kg > 0 %}<span class="sub">o último com {{ i.parcial_kg|kg }} kg</span>{% endif %}</td>
+        <td class="num">{{ i.unidades_total_previstas }}{% if i.parcial_kg > 0 %}<span class="sub">{{ i.unidades_previstas }} cheios + 1 com {{ i.parcial_kg|kg }} kg</span>{% endif %}</td>
         <td class="num">{% if i.voltam_vazios %}<b class="amarelo-texto">{{ i.voltam_vazios }}</b>{% elif i.disponivel is None %}—{% else %}0{% endif %}</td>
         <td class="num">{{ i.kg_previsto|kg }}</td><td class="num">{{ i.preco_kg|num:4 }}</td>
         <td class="num">{{ i.tempo_padrao_min|num:1 }} min/un.<span class="sub">{{ i.minutos_previstos|duracao }}</span></td>
@@ -112,7 +121,7 @@
     <thead><tr><th>Quando</th><th>Funcionário</th><th>O quê</th><th>Motivo / observação</th><th>Lançado por</th></tr></thead>
     <tbody>{% for a in apontamentos %}
       <tr><td class="nowrap">{{ a.momento|date:"d/m/Y H:i:s" }}</td><td>{{ a.funcionario.get_full_name|default:a.funcionario.username }}</td>
-        <td>{{ a.get_evento_display }}{% if a.evento == "CHEIO" and a.quantidade < 0 %} (desfeito){% endif %}{% if a.item %} · {{ a.item.tipo.nome }}{% endif %}</td><td>{{ a.get_motivo_display }}{% if a.observacao %} {{ a.observacao }}{% endif %}</td>
+        <td>{{ a.get_evento_display }}{% if a.evento == "CHEIO" %}: {{ a.quantidade }}{% endif %}{% if a.item %} · {{ a.item.tipo.nome }}{% endif %}</td><td>{{ a.get_motivo_display }}{% if a.observacao %} {{ a.observacao }}{% endif %}</td>
         <td>{% if a.corrigido %}<span class="etiqueta amarelo">correção</span> {% endif %}{{ a.registrado_por.get_full_name|default:a.registrado_por.username|default:"—" }}</td></tr>
     {% empty %}<tr><td colspan="5" class="vazio">Sem apontamentos.</td></tr>{% endfor %}</tbody>
   </table></div>
