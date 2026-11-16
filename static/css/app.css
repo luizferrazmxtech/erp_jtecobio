@@ -577,3 +577,37 @@ a.indicador:hover { text-decoration: none; border-color: var(--borda-forte); }
 .margem-forn { display: flex; flex-direction: column; gap: 4px; }
 .margem-forn b.vermelho { color: var(--vermelho); }
 .grafico-vendas .dica-mes .sub-dica { margin-top: 1px; padding-left: 18px; font-size: 11px; opacity: .75; }
+
+/* Nova OS: saldo do envase */
+.saldo-envase { position: relative; border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 16px; margin-bottom: 14px; background: #fafbfc; }
+.saldo-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.saldo-cab h4 { margin: 0; font-size: 15px; }
+.saldo-numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 18px; margin-bottom: 12px; }
+.saldo-numeros span { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--suave); }
+.saldo-numeros b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+.saldo-numeros small { font-size: 12px; color: var(--suave); }
+.ponto { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.ponto.alocado { background: var(--verde); }
+.ponto.falta { background: var(--vermelho); }
+.ponto.vazio { background: repeating-linear-gradient(45deg, #9aa5b1 0 2px, #e3e7ec 2px 4px); }
+.saldo-grafico { padding: 14px 0 0; }
+.saldo-barra { position: relative; display: flex; height: 34px; border-radius: 7px; background: #eef1f4; overflow: visible; }
+.saldo-barra .seg { height: 100%; min-width: 2px; cursor: pointer; outline: none; transition: width .2s ease; }
+.saldo-barra .seg:first-child { border-radius: 7px 0 0 7px; }
+.saldo-barra .seg:last-of-type { border-radius: 0 7px 7px 0; }
+.saldo-barra .seg.cheio { background: var(--cor); }
+.saldo-barra .seg.falta { background: repeating-linear-gradient(45deg, var(--vermelho) 0 6px, #e05a5a 6px 12px); }
+.saldo-barra .seg.vazio { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--cor) 35%, #fff) 0 5px, #fff 5px 10px); border-left: 1px solid #fff; }
+.saldo-barra .seg:hover, .saldo-barra .seg:focus { filter: brightness(.9); }
+.saldo-marca { position: absolute; top: -14px; bottom: -4px; width: 0; border-left: 2px dashed var(--escuro); pointer-events: none; }
+.saldo-marca span { position: absolute; top: -4px; left: 4px; font-size: 11px; font-weight: 700; color: var(--escuro); white-space: nowrap; }
+.saldo-escala { position: relative; height: 18px; margin-top: 4px; }
+.saldo-escala span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--suave); }
+.saldo-escala span:first-child { transform: none; }
+.saldo-escala span:last-child { transform: translateX(-100%); }
+.saldo-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: #3d4754; margin-top: 4px; }
+.saldo-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.saldo-dica { position: absolute; z-index: 4; transform: translate(-50%, calc(-100% - 6px)); background: var(--topo); color: #fff; font-size: 12px; padding: 7px 10px; border-radius: 7px; pointer-events: none; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+@media (max-width: 760px) { .saldo-numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.saldo-escala span { white-space: nowrap; }
+.saldo-marca.direita span { left: auto; right: 4px; }
