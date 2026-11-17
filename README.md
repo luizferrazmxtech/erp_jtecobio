@@ -17,6 +17,7 @@ Feito em **Python + Django** com banco **PostgreSQL**.
 | Telas | Painel, estoque, vendas, contratos, notas e cadastros, no estilo do Gestão Click | `apps/web`, `templates/`, `static/css/app.css` |
 | Perfis | Grupos Diretoria, Comercial, Logística e Financeiro | `apps/cadastros/management/commands/criar_perfis.py` |
 | Ordens de serviço | Envase para clientes: tipos de recipiente (capacidade, preço por kg, tempo padrão), OS com cálculo do fracionamento, apontamento de início, pausas e fim por funcionário, TMO real × tempo padrão, conclusão e faturamento | `apps/servicos` |
+| Impostos | Cada compra guarda o crédito de ICMS, PIS e COFINS por kg (da nota ou pelo ICMS informado), e o tanque usa a média. O pedido mostra o quadro "Impostos desta venda" (débito, créditos da compra e do frete, a pagar e margem real). A conta corrente mensal (Fiscal → Conta corrente de impostos) soma as notas: saldo anterior + créditos − débitos | `apps/fiscal/tributos.py`, `apps/fiscal/apuracao.py` |
 | Vendas (fase 2) | Pedido de venda atendido por vários tanques, tabela de frete, sugestão da combinação mais barata (produto + frete), reserva, faturamento com baixa no estoque e margem | `apps/vendas` |
 
 Telas (menu lateral):

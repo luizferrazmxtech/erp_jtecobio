@@ -18,8 +18,11 @@ from django.db.models import F, Sum
 
 from apps.cadastros.models import Local, Parceiro, Produto
 from apps.contratos.models import Contrato
-from apps.estoque.models import Lote, Movimentacao
+from apps.estoque.models import CreditosPorKg, Lote, Movimentacao
 from apps.fiscal.models import NotaFiscal
+
+from apps.fiscal import tributos
+from apps.fiscal.tributos import Impostos
 
 from . import impostos
 
@@ -106,6 +109,10 @@ class Pedido(models.Model):
         "ICMS na venda (%)", max_digits=5, decimal_places=2, null=True, blank=True,
         help_text="Em branco: 18% dentro de SP, 12% para outros estados.",
     )
+    icms_frete = models.DecimalField(
+        "ICMS do frete (%)", max_digits=5, decimal_places=2, default=tributos.ICMS_FRETE_PADRAO,
+        help_text="ICMS destacado no CT-e do frete da venda, que vira crédito. 12% é o comum; 0 se a transportadora não destaca.",
+    )
     status = models.CharField(max_length=4, choices=Status.choices, default=Status.RASCUNHO)
     nota = models.ForeignKey(
         NotaFiscal, on_delete=models.PROTECT, null=True, blank=True, related_name="pedidos",
@@ -174,7 +181,35 @@ class Pedido(models.Model):
     def margem_kg(self) -> Decimal:
         return self.margem / self.quantidade_kg if self.quantidade_kg else ZERO
 
-    # Valores net (sem os impostos que viram crédito/débito) ----------------
+    # Impostos desta venda (regras em apps/fiscal/tributos.py) -------------
+    @property
+    def debitos(self) -> Impostos:
+        """ICMS, PIS e COFINS que nascem na venda."""
+        return tributos.debito_venda(self.receita, self.icms_venda or 0, self.exportacao)
+
+    @property
+    def creditos_produto(self) -> Impostos:
+        """Créditos que vieram na compra do produto, dos lotes/tanques usados."""
+        total = Impostos()
+        for o in self.origens.all():
+            total = total + o.creditos_kg.vezes(o.quantidade_kg)
+        return total
+
+    @property
+    def creditos_frete(self) -> Impostos:
+        """O frete da venda é pago pela JT (CIF): o CT-e também dá crédito."""
+        return tributos.credito_frete(self.custo_frete, self.icms_frete)
+
+    @property
+    def creditos(self) -> Impostos:
+        return self.creditos_produto + self.creditos_frete
+
+    @property
+    def a_pagar(self) -> Impostos:
+        """Débito − créditos, imposto por imposto. Negativo = sobra crédito
+        (fica no saldo credor do mês e abate as próximas vendas)."""
+        return self.debitos - self.creditos
+
     @property
     def fator_venda(self) -> Decimal:
         return impostos.fator(self.icms_venda or 0, pis_cofins=not self.exportacao)
@@ -185,14 +220,23 @@ class Pedido(models.Model):
 
     @property
     def receita_net(self) -> Decimal:
-        return self.receita * self.fator_venda
+        return self.receita - self.debitos.total
+
+    @property
+    def custo_produto_net(self) -> Decimal:
+        return self.custo_produto - self.creditos_produto.total
+
+    @property
+    def custo_frete_net(self) -> Decimal:
+        return self.custo_frete - self.creditos_frete.total
 
     @property
     def custo_total_net(self) -> Decimal:
-        return self.custo_produto * self.fator_compra + impostos.frete_net(1) * self.custo_frete
+        return self.custo_produto_net + self.custo_frete_net
 
     @property
     def margem_net(self) -> Decimal:
+        """Margem real: o que sobra depois de pagar compra, frete e o imposto líquido."""
         return self.receita_net - self.custo_total_net
 
     @property
@@ -201,8 +245,8 @@ class Pedido(models.Model):
 
     @property
     def impostos_venda(self) -> Decimal:
-        """ICMS + PIS + COFINS da venda, já descontados os créditos da compra e do frete."""
-        return (self.receita - self.receita_net) - (self.custo_total - self.custo_total_net)
+        """ICMS + PIS + COFINS a pagar por esta venda, já descontados os créditos."""
+        return self.a_pagar.total
 
     @property
     def mesma_venda(self) -> list["Pedido"]:
@@ -216,7 +260,7 @@ class Pedido(models.Model):
         return self.status == self.Status.RASCUNHO
 
 
-class PedidoOrigem(models.Model):
+class PedidoOrigem(CreditosPorKg):
     """Uma parte do pedido que sai de um tanque (local)."""
 
     pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="origens")

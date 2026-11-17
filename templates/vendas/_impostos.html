@@ -1,0 +1,46 @@
+{% load erp %}{% with q=impostos %}
+<div class="cartao mb impostos-venda" id="impostos-venda">
+  <div class="titulo"><div><h2>{% icone "fiscal" %} Impostos <b>desta venda</b></h2>
+    <p>O imposto que a JT pagou na compra e no frete volta como <b>crédito</b> e abate o <b>débito</b> que nasce na venda. Só a diferença é paga. O acerto oficial é feito no mês inteiro: veja a <a href="{% url 'web:impostos' %}">conta corrente de impostos</a>.</p></div></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th></th><th class="num">ICMS</th><th class="num">PIS</th><th class="num">COFINS</th><th class="num">Total</th></tr></thead>
+    <tbody>
+      {% for l in q.linhas %}
+      <tr><td>{% if l.sinal %}<span class="suave">({{ l.sinal }})</span> {% endif %}{{ l.nome }}</td>
+        <td class="num">{{ l.icms|brl }}</td><td class="num">{{ l.pis|brl }}</td><td class="num">{{ l.cofins|brl }}</td><td class="num"><b>{{ l.total|brl }}</b></td></tr>
+      {% endfor %}
+      {% with l=q.a_pagar %}
+      <tr class="total-impostos"><td><b>= A pagar</b> <span class="pequeno suave">(negativo = sobra crédito para o mês)</span></td>
+        <td class="num {% if l.icms < 0 %}positivo{% endif %}"><b>{{ l.icms|brl }}</b></td><td class="num {% if l.pis < 0 %}positivo{% endif %}"><b>{{ l.pis|brl }}</b></td>
+        <td class="num {% if l.cofins < 0 %}positivo{% endif %}"><b>{{ l.cofins|brl }}</b></td><td class="num {% if l.total < 0 %}positivo{% endif %}"><b>R$ {{ l.total|brl }}</b></td></tr>
+      {% endwith %}
+    </tbody>
+  </table></div>
+  <div class="corpo">
+    <div class="margem-real">
+      <h3>Margem real</h3>
+      <table class="conta">
+        <tr><td>Receita da venda</td><td class="num">R$ {{ q.receita|brl }}</td></tr>
+        <tr><td>(−) Compra do produto (custo dos tanques)</td><td class="num">R$ {{ q.custo_produto|brl }}</td></tr>
+        <tr><td>(−) Frete</td><td class="num">R$ {{ q.custo_frete|brl }}</td></tr>
+        <tr><td>(−) Impostos líquidos (a pagar acima)</td><td class="num">R$ {{ q.impostos|brl }}</td></tr>
+        <tr class="resultado"><td><b>= Margem real</b></td><td class="num {% if q.margem >= 0 %}positivo{% else %}negativo{% endif %}"><b>R$ {{ q.margem|brl }}</b><br><span class="pequeno suave">R$ {{ q.margem_kg|num:4 }}/kg</span></td></tr>
+      </table>
+      <p class="pequeno suave">Sem os créditos, os impostos desta venda seriam R$ {{ q.sem_impostos.total|brl }}.</p>
+    </div>
+    {% if q.tanques %}
+    <div class="creditos-tanques">
+      <h3>Crédito que vem de cada tanque</h3>
+      <table class="conta">
+        <tr class="suave pequeno"><td>Tanque</td><td class="num">kg</td><td class="num">crédito R$/kg</td><td class="num">crédito</td></tr>
+        {% for t in q.tanques %}
+        <tr><td>{{ t.nome }}{% if t.lote %} <span class="pequeno suave">lote {{ t.lote }}</span>{% endif %}</td><td class="num">{{ t.kg|kg }}</td>
+          <td class="num" title="ICMS R$ {{ t.icms_kg|num:4 }} + PIS/COFINS R$ {{ t.pis_cofins_kg|num:4 }}">{{ t.credito_kg|num:4 }}</td><td class="num">R$ {{ t.total|brl }}</td></tr>
+        {% endfor %}
+      </table>
+      <p class="pequeno suave">Cada compra guarda o crédito da sua nota (ICMS de 12% de fora de SP, 18% de dentro, mais PIS/COFINS sem o ICMS na base). O tanque usa a média do que entrou nele.{% if pedido.editavel %} Os números são os dos tanques salvos.{% endif %}</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endwith %}

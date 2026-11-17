@@ -31,6 +31,22 @@
   </div>
 </div>
 
+{% if impostos_mes %}
+<div class="cartao mb conta-impostos">
+  <div class="titulo">
+    <div><h2>{% icone "fiscal" %} Conta corrente de <b>impostos</b></h2><p>Último mês com notas: saldo anterior + créditos − débitos. Saldo credor passa para o mês seguinte.</p></div>
+    <a class="botao claro pequeno" href="{% url 'web:impostos' %}">Ver meses</a>
+  </div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Imposto</th><th>Mês</th><th class="num">Saldo anterior</th><th class="num">(+) Créditos</th><th class="num">(−) Débitos</th><th class="num">Situação</th></tr></thead>
+    <tbody>{% for i in impostos_mes %}
+      <tr><td><b>{{ i.tributo.nome }}</b></td><td>{{ i.mes.data|date:"M/Y"|lower }}</td><td class="num">{{ i.mes.saldo_anterior|brl }}</td><td class="num">{{ i.mes.creditos|brl }}</td><td class="num">{{ i.mes.debitos|brl }}</td>
+        <td class="num">{% if i.mes.a_pagar > 0 %}<b class="saldo-pagar">a pagar R$ {{ i.mes.a_pagar|brl }}</b>{% else %}<b class="saldo-credor">credor R$ {{ i.mes.saldo_atual|brl }}</b>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
 <div class="cartao mb">
   <div class="titulo">
     <div><h2>{% icone "tanque" %} Saldo dos <b>tanques</b></h2><p>Quanto há em cada distribuidora, industrializador e armazém. A faixa vermelha é o que já está reservado em pedidos.</p></div>
