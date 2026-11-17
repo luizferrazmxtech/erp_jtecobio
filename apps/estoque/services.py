@@ -16,6 +16,8 @@ from django.db.models import DecimalField, F, Sum
 from django.db.models.functions import Coalesce
 
 from apps.cadastros.models import Local, Produto
+from apps.fiscal import tributos
+from apps.fiscal.tributos import Impostos
 
 from .models import Configuracao, Lote, Movimentacao
 
@@ -66,6 +68,36 @@ def custo_medio(produto: Produto, local: Local) -> Decimal:
     if qtd <= 0:
         return ZERO
     return _arredondar_custo(valor_em_estoque(produto, local) / qtd)
+
+
+def creditos_medios(produto: Produto, local: Local, lote: Lote | None = None) -> Impostos:
+    """Crédito médio por kg (ICMS, PIS, COFINS) do que está no tanque.
+
+    Funciona como o custo médio: cada entrada traz o crédito da sua nota e
+    cada saída leva o crédito médio do momento.
+    """
+    qtd = saldo(produto, local, lote)
+    if qtd <= 0:
+        return Impostos()
+    somas = _movs(produto, local, lote).aggregate(**{
+        nome: Coalesce(Sum(F("quantidade_kg") * F(f"credito_{nome}_kg"), output_field=_DEC), ZERO, output_field=_DEC)
+        for nome in ("icms", "pis", "cofins")
+    })
+    return Impostos(somas["icms"], somas["pis"], somas["cofins"]).dividido(qtd).arredondado(tributos.SEIS_CASAS)
+
+
+def creditos_da_nota(nota, produto: Produto) -> Impostos | None:
+    """Crédito por kg tirado da própria nota de compra (valores destacados nela).
+
+    Retorna None quando a nota não tem o produto ou não tem impostos lançados.
+    """
+    if nota is None:
+        return None
+    item = nota.itens.filter(produto=produto, quantidade__gt=0).first()
+    if item is None or not (item.valor_icms or item.valor_pis or item.valor_cofins):
+        return None
+    return Impostos(item.valor_icms, item.valor_pis, item.valor_cofins).dividido(item.quantidade).arredondado(
+        tributos.SEIS_CASAS)
 
 
 @dataclass
@@ -136,6 +168,12 @@ def _custo_de_saida(produto, local, lote) -> Decimal:
     return custo_medio(produto, local)
 
 
+def _creditos_de_saida(produto, local, lote) -> Impostos:
+    if Configuracao.atual().metodo_custo == Configuracao.MetodoCusto.LOTE and lote is not None:
+        return lote.creditos_kg
+    return creditos_medios(produto, local)
+
+
 def _validar_saldo(produto, local, lote, quantidade: Decimal) -> None:
     if Configuracao.atual().permitir_saldo_negativo:
         return
@@ -182,22 +220,36 @@ def registrar_entrada(
     observacao: str = "",
     usuario=None,
     origem_lote: str = "",
+    icms_pct=None,
+    creditos: Impostos | None = None,
 ) -> Movimentacao:
     """Entrada de produto (compra, saldo inicial, retorno de industrialização).
 
     Sempre cria (ou reaproveita) um lote, para que o custo por lote funcione
     mesmo que o cliente comece usando custo médio.
+
+    Créditos de imposto por kg, nesta ordem: os informados em `creditos`;
+    os destacados na nota de compra; ou calculados sobre o custo com o ICMS
+    `icms_pct` (em branco: o ICMS de compra do cadastro do produto).
     """
     quantidade = _validar_quantidade(quantidade_kg)
     custo = _dec(custo_unitario)
     if custo < 0:
         raise ValidationError("O custo não pode ser negativo.")
+    if icms_pct is None or icms_pct == "":
+        icms_pct = produto.icms_compra
+    if creditos is None:
+        creditos = creditos_da_nota(nota, produto) or tributos.credito_por_kg(custo, icms_pct)
+    if creditos.total > custo:
+        raise ValidationError("Os créditos de imposto não podem ser maiores que o custo.")
     if not lote_codigo:
         lote_codigo = _codigo_automatico(produto, nota, tipo, data, local, custo)
     lote, criado = Lote.objects.get_or_create(
         produto=produto,
         codigo=lote_codigo,
-        defaults={"data": data, "custo_unitario": custo, "nota_entrada": nota, "origem": origem_lote},
+        defaults={"data": data, "custo_unitario": custo, "nota_entrada": nota, "origem": origem_lote,
+                  "icms_compra": icms_pct, "credito_icms_kg": creditos.icms,
+                  "credito_pis_kg": creditos.pis, "credito_cofins_kg": creditos.cofins},
     )
     if not criado and lote.custo_unitario != custo:
         raise ValidationError(
@@ -207,6 +259,7 @@ def registrar_entrada(
         data=data, tipo=tipo, produto=produto, local=local, lote=lote,
         quantidade_kg=quantidade, custo_unitario=custo, nota=nota, contrato=contrato,
         documento=documento, observacao=observacao, usuario=usuario,
+        credito_icms_kg=creditos.icms, credito_pis_kg=creditos.pis, credito_cofins_kg=creditos.cofins,
     )
 
 
@@ -231,10 +284,12 @@ def registrar_saida(
     _travar_local(local)
     _validar_saldo(produto, local, lote, quantidade)
     custo = _custo_de_saida(produto, local, lote)
+    cred = _creditos_de_saida(produto, local, lote)
     return Movimentacao.objects.create(
         data=data, tipo=tipo, produto=produto, local=local, lote=lote,
         quantidade_kg=-quantidade, custo_unitario=custo, nota=nota, contrato=contrato,
         documento=documento, observacao=observacao, usuario=usuario,
+        credito_icms_kg=cred.icms, credito_pis_kg=cred.pis, credito_cofins_kg=cred.cofins,
     )
 
 
@@ -261,6 +316,8 @@ def transferir(
     entrada = Movimentacao.objects.create(
         data=data, tipo=Movimentacao.Tipo.TRANSF_ENTRADA, produto=produto, local=destino,
         lote=saida.lote, quantidade_kg=-saida.quantidade_kg, custo_unitario=saida.custo_unitario,
+        credito_icms_kg=saida.credito_icms_kg, credito_pis_kg=saida.credito_pis_kg,
+        credito_cofins_kg=saida.credito_cofins_kg,
         documento=documento, observacao=observacao, usuario=usuario, par=saida,
     )
     saida.par = entrada
@@ -296,10 +353,13 @@ def ajustar_inventario(
         return None
     if diferenca > 0:
         custo = lote.custo_unitario if lote else custo_medio(produto, local)
+        cred = lote.creditos_kg if lote else creditos_medios(produto, local)
     else:
         custo = _custo_de_saida(produto, local, lote)
+        cred = _creditos_de_saida(produto, local, lote)
     return Movimentacao.objects.create(
         data=data, tipo=Movimentacao.Tipo.AJUSTE, produto=produto, local=local, lote=lote,
         quantidade_kg=diferenca, custo_unitario=custo, observacao=motivo.strip(), usuario=usuario,
+        credito_icms_kg=cred.icms, credito_pis_kg=cred.pis, credito_cofins_kg=cred.cofins,
         documento=f"Inventário: contado {contada} kg, sistema {atual} kg",
     )

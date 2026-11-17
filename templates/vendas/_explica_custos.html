@@ -2,20 +2,20 @@
 <details class="explica-custos">
   <summary>{% icone "ajuda" %} Como cada custo é calculado</summary>
   <div class="explica-corpo">
-    <p>Os números <b>net</b> são sem os impostos que a JT recupera como crédito (ICMS, PIS e COFINS), do mesmo jeito que a planilha DRE calcula. Os números <b>brutos</b> são os valores da nota, com impostos.</p>
+    <p>Os números <b>net</b> são sem os impostos que a JT recupera como crédito (ICMS, PIS e COFINS), com as regras em vigor: o ICMS sai da base do PIS e da COFINS, e o frete pago pela JT também dá crédito. Os números <b>brutos</b> são os valores da nota, com impostos.</p>
     <dl>
       <dt>Preço net de venda</dt>
       <dd>{% if pedido.exportacao %}Exportação não tem ICMS, PIS nem COFINS: o preço net é o próprio preço, R$ {{ pedido.preco_unitario|num:4 }}.{% else %}
         Preço × (1 − ICMS {{ explica.icms_venda|num:0 }}%) × (1 − PIS 1,65% − COFINS 7,6%) = R$ {{ pedido.preco_unitario|num:4 }} × {{ pedido.fator_venda|num:5 }} = <b>R$ {{ explica.preco_net|num:4 }}/kg</b>.{% endif %}</dd>
 
       <dt>Produto net</dt>
-      <dd>Custo do produto no tanque × (1 − ICMS {{ explica.icms_compra|num:0 }}% da compra) × (1 − 9,25% de PIS/COFINS) = custo × {{ pedido.fator_compra|num:4 }}.
-        {% if e %}No {{ e.nome }}: R$ {{ e.custo|num:4 }} × {{ pedido.fator_compra|num:4 }} = <b>R$ {{ e.custo_net|num:4 }}/kg</b>.{% endif %}
-        O custo do tanque é o custo médio do que entrou nele (preço da nota de compra).</dd>
+      <dd>Custo do produto no tanque − o crédito que veio na compra (ICMS da nota, normalmente 12% de fora de SP ou 18% de dentro, mais 9,25% de PIS/COFINS sobre o valor sem o ICMS).
+        {% if e %}No {{ e.nome }}: R$ {{ e.custo|num:4 }} − crédito R$ {{ e.credito|num:4 }} (ICMS R$ {{ e.credito_icms|num:4 }} + PIS/COFINS R$ {{ e.credito_pis_cofins|num:4 }}) = <b>R$ {{ e.custo_net|num:4 }}/kg</b>.{% endif %}
+        Custo e crédito são a média do que entrou no tanque, cada compra com o imposto da sua nota.</dd>
 
       <dt>Frete net</dt>
-      <dd>Frete por kg × 0,88, porque o CT-e dá crédito de 12% de ICMS (o frete não tem PIS/COFINS na conta da planilha).
-        {% if e and e.frete is not None %}No {{ e.nome }}: R$ {{ e.frete|num:4 }} × 0,88 = <b>R$ {{ e.frete_net|num:4 }}/kg</b>.{% endif %}
+      <dd>Frete por kg − o crédito do CT-e: ICMS de {{ pedido.icms_frete|num:0 }}% e mais 9,25% de PIS/COFINS sobre o resto (a planilha só desconta o ICMS, × 0,88).
+        {% if e and e.frete is not None %}No {{ e.nome }}: R$ {{ e.frete|num:4 }} − créditos = <b>R$ {{ e.frete_net|num:4 }}/kg</b>.{% endif %}
         O frete vem da tabela de frete (Vendas → Fretes) e pode ser mudado no cartão do tanque. Sem tabela, o frete conta como zero e o custo médio aparece com <b>*</b>.</dd>
 
       <dt>Custo efetivo do tanque</dt>
@@ -29,7 +29,7 @@
       <dt>Por que a net pode ser menor que a bruta</dt>
       <dd>A diferença é o imposto que a JT ainda tem de pagar: o imposto da venda menos os créditos da compra e do frete.
         {% if e and e.margem_net is not None %}No {{ e.nome }}: imposto da venda R$ {{ e.imposto_venda|num:4 }} − créditos R$ {{ e.creditos|num:4 }} = <b>R$ {{ e.imposto_pagar|num:4 }}/kg</b> a pagar, e R$ {{ e.margem|num:4 }} − R$ {{ e.imposto_pagar|num:4 }} = R$ {{ e.margem_net|num:4 }}.{% endif %}
-        {% if not pedido.exportacao %}Isso acontece porque a venda paga ICMS de {{ explica.icms_venda|num:0 }}% e PIS/COFINS sobre um preço maior, enquanto o crédito vem de uma compra mais barata (ICMS de {{ explica.icms_compra|num:0 }}%). Se a net ficar maior que a bruta, os créditos superam o imposto da venda.{% endif %}</dd>
+        {% if not pedido.exportacao %}Isso acontece porque a venda paga ICMS de {{ explica.icms_venda|num:0 }}% e PIS/COFINS sobre um preço maior, enquanto o crédito vem de uma compra mais barata e, quase sempre, com ICMS menor (12% de fora de SP). Se a net ficar maior que a bruta, os créditos superam o imposto da venda.{% endif %}</dd>
 
       <dt>Custo efetivo médio</dt>
       <dd>Média dos tanques escolhidos, pesada pelos quilos: soma de (kg que sai × custo efetivo) ÷ kg alocados.</dd>

@@ -87,6 +87,7 @@
       <a class="{% if request.GET.direcao == 'S' %}ativo{% endif %}" href="{% url 'web:notas' %}?direcao=S">{% icone "saida" %} Notas de saída</a>
       <a class="{% if request.GET.direcao == 'E' %}ativo{% endif %}" href="{% url 'web:notas' %}?direcao=E">{% icone "entrada" %} Notas de entrada</a>
       <a class="{% if request.GET.direcao == 'CTE' %}ativo{% endif %}" href="{% url 'web:notas' %}?direcao=CTE">{% icone "frete" %} CT-e (fretes)</a>
+      <a class="{% if '/fiscal/impostos/' in request.path %}ativo{% endif %}" href="{% url 'web:impostos' %}">{% icone "fiscal" %} Conta corrente de impostos</a>
     </div>
   </details>
 

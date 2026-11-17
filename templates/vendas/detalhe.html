@@ -38,10 +38,12 @@
   </div>
 </div>
 
+{% include "vendas/_impostos.html" %}
+
 {% if pedido.editavel %}
 {% localize off %}
 <form method="post" action="{% url 'vendas:salvar_origens' pedido.pk %}" class="cartao mb escolha-rota" id="escolha-rota"
-      data-pedido="{{ pedido.quantidade_kg }}" data-preco="{{ pedido.preco_unitario }}" data-fator-venda="{{ pedido.fator_venda }}" data-fator-compra="{{ pedido.fator_compra }}" data-fator-frete="0.88" data-destino="{{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}">{% csrf_token %}
+      data-pedido="{{ pedido.quantidade_kg }}" data-preco="{{ pedido.preco_unitario }}" data-fator-venda="{{ pedido.fator_venda }}" data-fator-frete="{{ fator_frete }}" data-destino="{{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}">{% csrf_token %}
   <div class="titulo">
     <div><h2>{% icone "tanque" %} De quais <b>tanques</b> sai</h2>
       <p>Cada tanque mostra o custo do produto e o frete até {{ pedido.destino_cidade|title }}/{{ pedido.destino_uf }}, bruto (como na nota, com impostos) e net (sem ICMS, PIS e COFINS). A margem net é o que a JT ganha de verdade: a margem bruta menos o imposto da venda que sobra para pagar depois de usar os créditos da compra e do frete. A rota sugerida usa os tanques de menor custo efetivo net até completar o pedido. Clique num tanque, arraste a barra (de 10 em 10 kg) ou digite quanto sai: o total nunca passa do pedido. Falta um local? <a href="{% url 'web:adicionar' 'local' %}">Cadastre um novo local</a>.</p></div>
@@ -75,7 +77,7 @@
     {% for l in linhas %}
       <div class="origem{% if l.opcao.frete is None %} sem-frete{% endif %}" data-i="{{ forloop.counter0 }}"
            data-livre="{{ l.opcao.livre }}" data-saldo="{{ l.saldo }}" data-capacidade="{{ l.capacidade }}"
-           data-custo="{{ l.opcao.custo_kg }}" data-sugerido="{{ l.sugerido }}" data-nome="{{ l.opcao.local.nome }}"
+           data-custo="{{ l.opcao.custo_kg }}" data-credito="{{ l.opcao.credito_kg }}" data-sugerido="{{ l.sugerido }}" data-nome="{{ l.opcao.local.nome }}"
            data-salvo-qtd="{{ l.quantidade|default:0 }}" data-salvo-frete="{% if l.frete is not None %}{{ l.frete }}{% endif %}">
         <input type="hidden" name="local_{{ forloop.counter0 }}" value="{{ l.opcao.local.pk }}">
         <input type="hidden" name="lote_{{ forloop.counter0 }}" value="{{ l.opcao.lote.pk|default:'' }}">
@@ -92,7 +94,7 @@
           <table class="custos">
             <thead><tr><th>R$/kg</th><th title="Valores da nota, com impostos">bruto</th><th title="Sem os impostos (ICMS, PIS, COFINS)">net</th></tr></thead>
             <tbody>
-              <tr><th>Produto</th><td>{{ l.opcao.custo_kg|num:4 }}</td><td>{{ l.opcao.custo_net_kg|num:4 }}</td></tr>
+              <tr><th>Produto</th><td>{{ l.opcao.custo_kg|num:4 }}</td><td title="Custo − crédito da compra: ICMS R$ {{ l.opcao.creditos.icms|num:4 }} + PIS/COFINS R$ {{ l.opcao.creditos.pis_cofins|num:4 }}">{{ l.opcao.custo_net_kg|num:4 }}</td></tr>
               <tr><th>Frete <span class="seta-frete">→ {{ pedido.destino_uf }}</span></th>
                 <td><input class="frete" name="frete_{{ forloop.counter0 }}" value="{% if l.frete is not None %}{{ l.frete|num:4 }}{% endif %}" placeholder="sem tabela" inputmode="decimal" title="Frete por kg; vem da tabela de frete e pode ser alterado"></td>
                 <td class="v-frete-net">—</td></tr>

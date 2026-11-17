@@ -8,8 +8,8 @@
    até completar o pedido.
 
    Custo net, como na planilha DRE (apps/vendas/impostos.py):
-     produto net = custo × fator de compra   (ICMS 12% + PIS/COFINS → 0,7986)
-     frete net   = frete × 0,88              (crédito de ICMS do CT-e)
+     produto net = custo − crédito do tanque (ICMS da nota + PIS/COFINS, vem do servidor)
+     frete net   = frete × fator do frete    (crédito de ICMS do CT-e + PIS/COFINS → 0,7986)
      preço net   = preço × fator de venda    (ICMS 18% em SP → 0,74415)
 */
 (function () {
@@ -19,7 +19,6 @@
   var pedidoKg = Number(form.dataset.pedido);
   var preco = Number(form.dataset.preco);
   var fatorVenda = Number(form.dataset.fatorVenda) || 1;
-  var fatorCompra = Number(form.dataset.fatorCompra) || 1;
   var fatorFrete = Number(form.dataset.fatorFrete) || 1;
   var precoNet = preco * fatorVenda;
   var cartoes = Array.prototype.slice.call(form.querySelectorAll(".origem"));
@@ -52,6 +51,7 @@
       saldo: Number(el.dataset.saldo),
       capacidade: Number(el.dataset.capacidade) || Number(el.dataset.saldo) || 1,
       custo: Number(el.dataset.custo),
+      credito: Number(el.dataset.credito) || 0,
       sugeridoServidor: Number(el.dataset.sugerido),
       frete: el.querySelector("input.frete"),
       qtd: el.querySelector("input.qtd"),
@@ -64,7 +64,7 @@
 
   function freteDe(t) { return ler(t.frete.value); }
   function efetivoDe(t) { var f = freteDe(t); return f === null ? null : t.custo + f; }
-  function efetivoNetDe(t) { var f = freteDe(t); return f === null ? null : t.custo * fatorCompra + f * fatorFrete; }
+  function efetivoNetDe(t) { var f = freteDe(t); return f === null ? null : t.custo - t.credito + f * fatorFrete; }
   function qtdDe(t) { return Math.max(0, ler(t.qtd.value) || 0); }
 
   // Quanto este tanque ainda pode mandar sem passar do pedido.
@@ -78,7 +78,7 @@
     return tanques.slice().sort(function (a, b) {
       var ea = efetivoNetDe(a), eb = efetivoNetDe(b);
       if ((ea === null) !== (eb === null)) return ea === null ? 1 : -1;
-      var ca = ea === null ? a.custo * fatorCompra : ea, cb = eb === null ? b.custo * fatorCompra : eb;
+      var ca = ea === null ? a.custo - a.credito : ea, cb = eb === null ? b.custo - b.credito : eb;
       return ca - cb || b.livre - a.livre;
     });
   }
@@ -123,7 +123,7 @@
     texto(t, ".v-sobra", ef === null ? null : preco - ef, 4);
     texto(t, ".v-sobra-net", efn === null ? null : precoNet - efn, 4);
     // Margem bruta − margem net = imposto da venda − créditos (produto e frete).
-    var impVenda = preco - precoNet, creditos = t.custo * (1 - fatorCompra) + (f || 0) * (1 - fatorFrete);
+    var impVenda = preco - precoNet, creditos = t.credito + (f || 0) * (1 - fatorFrete);
     t.el.querySelector(".v-imposto").textContent = ef === null ? "" :
       "Imposto a pagar R$ " + fmt(impVenda - creditos, 4) + "/kg = imposto da venda R$ " + fmt(impVenda, 4) +
       " − créditos R$ " + fmt(creditos, 4);
@@ -195,7 +195,7 @@
         var f = freteDe(t);
         if (f === null) semFrete = true;
         custo += sai * (t.custo + (f || 0));
-        custoNet += sai * (t.custo * fatorCompra + (f || 0) * fatorFrete);
+        custoNet += sai * (t.custo - t.credito + (f || 0) * fatorFrete);
         escolhidos.push({ t: t, sai: sai });
       }
     });

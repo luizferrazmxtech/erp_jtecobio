@@ -22,7 +22,7 @@ class PedidoForm(forms.ModelForm):
     class Meta:
         model = Pedido
         fields = ["data", "cliente", "contrato", "produto", "quantidade_kg", "preco_unitario",
-                  "destino_cidade", "destino_uf", "exportacao", "icms_venda", "observacao"]
+                  "destino_cidade", "destino_uf", "exportacao", "icms_venda", "icms_frete", "observacao"]
         widgets = {
             "data": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "observacao": forms.Textarea(attrs={"rows": 2}),
@@ -50,10 +50,14 @@ class PedidoForm(forms.ModelForm):
         self.fields["contrato"].empty_label = "Sem contrato"
         self.fields["contrato"].help_text = "Só aparecem os contratos de venda abertos deste cliente."
         self.fields["destino_cidade"].required = False
+        self.fields["icms_frete"].required = False
         self.fields["destino_uf"].required = False
 
     def clean(self):
         dados = super().clean()
+        if dados.get("icms_frete") is None:
+            from apps.fiscal.tributos import ICMS_FRETE_PADRAO
+            dados["icms_frete"] = ICMS_FRETE_PADRAO
         cliente = dados.get("cliente")
         if cliente:
             if not dados.get("destino_cidade"):

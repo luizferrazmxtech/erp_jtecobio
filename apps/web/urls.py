@@ -13,6 +13,7 @@ urlpatterns = [
     path("contratos/<int:pk>/notas/", views.contrato_ligar_nota, name="contrato_ligar_nota"),
     path("fiscal/", views.notas, name="notas"),
     path("fiscal/<int:pk>/", views.nota, name="nota"),
+    path("fiscal/impostos/", views.impostos, name="impostos"),
     path("cadastros/parceiros/", views.parceiros, name="parceiros"),
     path("cadastros/parceiros/<int:pk>/", views.parceiro, name="parceiro"),
     path("cadastros/produtos/", views.produtos, name="produtos"),

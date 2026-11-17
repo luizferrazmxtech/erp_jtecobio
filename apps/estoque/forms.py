@@ -34,9 +34,14 @@ class EntradaForm(_Base):
     ])
     local = forms.ModelChoiceField(queryset=Local.objects.none())
     custo_unitario = forms.DecimalField(label="Custo (R$/kg)", min_value=0, decimal_places=4, max_digits=12)
+    icms_compra = forms.DecimalField(
+        label="ICMS da nota de compra (%)", required=False, min_value=0, max_value=100, decimal_places=2, max_digits=5,
+        help_text="Vira crédito e tira o imposto do custo. Em branco: o ICMS do cadastro do produto (12% para glicerina de fora de SP; 18% se comprou dentro de SP).",
+    )
     lote_codigo = forms.CharField(label="Código do lote", required=False,
                                   help_text="Deixe em branco para gerar automaticamente.")
-    field_order = ["tipo", "data", "produto", "local", "quantidade_kg", "custo_unitario", "lote_codigo", "documento", "observacao"]
+    field_order = ["tipo", "data", "produto", "local", "quantidade_kg", "custo_unitario", "icms_compra", "lote_codigo",
+                   "documento", "observacao"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

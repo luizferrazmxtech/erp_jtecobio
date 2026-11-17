@@ -72,7 +72,7 @@ def novo(request):
             outro = Pedido.objects.create(
                 data=pedido.data, cliente=pedido.cliente, produto=d["produto2"], quantidade_kg=d["quantidade2"],
                 preco_unitario=d["preco2"], destino_cidade=pedido.destino_cidade, destino_uf=pedido.destino_uf,
-                exportacao=pedido.exportacao, icms_venda=pedido.icms_venda,
+                exportacao=pedido.exportacao, icms_venda=pedido.icms_venda, icms_frete=pedido.icms_frete,
                 observacao=pedido.observacao, pedido_principal=pedido, usuario=request.user,
             )
             services.aplicar_sugestao(outro)
@@ -110,9 +110,11 @@ def _linhas_de_origem(pedido, origens):
     saldo, capacidade, custo, frete, custo efetivo, a quantidade já escolhida
     e a quantidade que o sistema sugere (rota de menor custo efetivo)."""
     atuais = {(o.local_id, o.lote_id): o for o in origens}
-    opcoes = services.opcoes_de_origem(pedido.produto, pedido.destino_cidade, pedido.destino_uf, excluir=pedido)
+    opcoes = services.opcoes_de_origem(pedido.produto, pedido.destino_cidade, pedido.destino_uf, excluir=pedido,
+                                       icms_frete=pedido.icms_frete)
     sugestao = services.sugerir_origens(
         pedido.produto, pedido.quantidade_kg, pedido.destino_cidade, pedido.destino_uf, excluir=pedido,
+        icms_frete=pedido.icms_frete,
     )
     sugeridas = {(o.local.pk, o.lote.pk if o.lote else None): q for o, q in sugestao.origens}
     capacidades = {t.local_id: t.capacidade_kg for t in Tanque.objects.filter(produto=pedido.produto)}
@@ -145,9 +147,12 @@ def _explicacao(pedido, linhas) -> dict:
         exemplo = {
             "nome": o.local.nome,
             "custo": o.custo_kg,
+            "credito": o.credito_kg.quantize(q4),
+            "credito_icms": o.creditos.icms.quantize(q4),
+            "credito_pis_cofins": o.creditos.pis_cofins.quantize(q4),
             "custo_net": o.custo_net_kg.quantize(q4),
             "frete": frete,
-            "frete_net": impostos.frete_net(frete).quantize(q4) if frete is not None else None,
+            "frete_net": impostos.frete_net(frete, pedido.icms_frete).quantize(q4) if frete is not None else None,
         }
         if frete is not None:
             exemplo["efetivo"] = o.custo_kg + frete
@@ -167,10 +172,44 @@ def _explicacao(pedido, linhas) -> dict:
     }
 
 
+def _quadro_impostos(pedido) -> dict:
+    """Números do quadro "Impostos desta venda": débito, créditos, a pagar e margem real."""
+    origens = list(pedido.origens.select_related("local", "lote"))
+    debitos, cred_prod, cred_frete = pedido.debitos, pedido.creditos_produto, pedido.creditos_frete
+    a_pagar = debitos - cred_prod - cred_frete
+
+    def linha(nome, imp, sinal=""):
+        return {"nome": nome, "sinal": sinal, "icms": imp.icms, "pis": imp.pis, "cofins": imp.cofins, "total": imp.total}
+
+    return {
+        "linhas": [
+            linha(f"Débito da venda{' (exportação: não tem)' if pedido.exportacao else ''}", debitos),
+            linha("Crédito da compra (tanques usados)", cred_prod, "−"),
+            linha(f"Crédito do frete (CT-e, ICMS {pedido.icms_frete:.0f}%)", cred_frete, "−"),
+        ],
+        "a_pagar": linha("A pagar", a_pagar, "="),
+        "sem_impostos": linha("Sem os créditos, seria", debitos),
+        "tanques": [
+            {"nome": str(o.local), "lote": o.lote.codigo if o.lote else "", "kg": o.quantidade_kg,
+             "credito_kg": o.credito_total_kg, "icms_kg": o.credito_icms_kg,
+             "pis_cofins_kg": o.credito_pis_kg + o.credito_cofins_kg,
+             "total": o.credito_total_kg * o.quantidade_kg}
+            for o in origens
+        ],
+        "receita": pedido.receita,
+        "custo_produto": pedido.custo_produto,
+        "custo_frete": pedido.custo_frete,
+        "impostos": a_pagar.total,
+        "margem": pedido.margem_net,
+        "margem_kg": pedido.margem_net_kg,
+    }
+
+
 @login_required
 def detalhe(request, pk):
     pedido = get_object_or_404(Pedido.objects.select_related("cliente", "produto", "contrato", "nota"), pk=pk)
-    contexto = {"pedido": pedido, "origens": pedido.origens.select_related("local", "lote", "transportadora")}
+    contexto = {"pedido": pedido, "origens": pedido.origens.select_related("local", "lote", "transportadora"),
+                "impostos": _quadro_impostos(pedido), "fator_frete": impostos.frete_net(1, pedido.icms_frete)}
     if pedido.editavel:
         from apps.web.views import _classe_nivel  # cor do nível, a mesma do painel
 

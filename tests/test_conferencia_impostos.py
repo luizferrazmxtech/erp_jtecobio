@@ -22,7 +22,9 @@ def test_fatores_iguais_aos_da_planilha():
     assert impostos.fator(12) == Decimal("0.798600")
     assert impostos.fator(18) == Decimal("0.744150")
     assert impostos.fator(0, pis_cofins=False) == Decimal("1")
-    assert impostos.frete_net("0.75") == Decimal("0.6600")
+    # Frete: crédito de ICMS 12% do CT-e e de PIS/COFINS sobre o resto (a planilha só usa 0,88).
+    assert impostos.frete_net("0.75") == Decimal("0.598950")
+    assert impostos.frete_net("0.75", 0) == Decimal("0.680625")
 
 
 @pytest.fixture
@@ -39,10 +41,10 @@ def pedido(glicerina, aroma, biobrotas):
 def test_pedido_mostra_margem_net(pedido):
     services.aplicar_sugestao(pedido)
     assert pedido.icms_venda == Decimal("18")
-    # receita net 50.000 × 0,74415; custo net 10.000 × (4 × 0,7986 + 0,10 × 0,88)
-    assert pedido.receita_net == Decimal("37207.500000")
-    assert round(pedido.custo_total_net, 2) == Decimal("32824.00")
-    assert round(pedido.margem_net, 2) == Decimal("4383.50")
+    # receita net 50.000 × 0,74415; custo net 10.000 × (4 × 0,7986 + 0,10 × 0,7986)
+    assert round(pedido.receita_net, 2) == Decimal("37207.50")
+    assert round(pedido.custo_total_net, 2) == Decimal("32742.60")
+    assert round(pedido.margem_net, 2) == Decimal("4464.90")
 
 
 def test_exportacao_sem_impostos(pedido):

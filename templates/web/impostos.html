@@ -1,0 +1,62 @@
+{% extends "base.html" %}{% load erp %}
+{% block titulo %}Conta corrente de impostos{% endblock %}
+{% block icone_titulo %}{% icone "fiscal" %}{% endblock %}
+{% block titulo_pagina %}Conta corrente de <b>impostos</b>{% endblock %}
+{% block trilha %}{% icone "direita" %} Fiscal {% icone "direita" %} <b>Impostos</b>{% endblock %}
+{% block conteudo %}
+<div class="aviso info">{% icone "alerta" %}<div>
+  Cada mês: <b>saldo anterior + créditos − débitos</b>. Se sobra, vira <b>saldo credor</b> e passa para o mês seguinte; se falta, é o imposto <b>a pagar</b>.
+  Débitos vêm das notas de venda; créditos, das notas de compra e dos CT-e, com os valores lançados no ERP antigo.
+  É uma estimativa: a apuração oficial é a da contabilidade (SPED Fiscal e EFD-Contribuições).
+</div></div>
+
+<form class="cartao filtros" method="get">
+  <div class="campos">
+    <div class="campo"><label>Ano</label><select name="ano" onchange="this.form.submit()">{% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% empty %}<option>{{ ano }}</option>{% endfor %}</select></div>
+  </div>
+</form>
+
+{% if pis_cofins_nao_lancado > 0 %}
+<div class="aviso">{% icone "alerta" %}<div>
+  Em {{ ano }} há compras para revenda e fretes lançados <b>sem crédito de PIS e COFINS</b> no ERP antigo. Se a contabilidade também não tomou esse crédito, são cerca de <b>R$ {{ pis_cofins_nao_lancado|brl }}</b> que podem ser recuperados (coluna "Crédito não lançado"). Vale confirmar com a contadora.
+</div></div>
+{% endif %}
+
+<div class="conta-impostos">
+{% for b in blocos %}
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "fiscal" %} <b>{{ b.tributo.nome }}</b></h2>
+    <p>{% if b.ultimo %}Em {{ b.ultimo.data|date:"F/Y"|lower }}: {% if b.ultimo.a_pagar > 0 %}<b class="saldo-pagar">R$ {{ b.ultimo.a_pagar|brl }} a pagar</b>{% else %}<b class="saldo-credor">saldo credor de R$ {{ b.ultimo.saldo_atual|brl }}</b>{% endif %}. {% endif %}
+      No ano: créditos R$ {{ b.creditos|brl }}, débitos R$ {{ b.debitos|brl }}, pago R$ {{ b.a_pagar|brl }}.</p></div></div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>Mês</th><th class="num">Saldo anterior</th><th class="num">(+) Créditos</th><th class="num">(−) Débitos</th><th class="num">= Resultado</th><th class="num">A pagar</th><th class="num">Saldo credor</th>{% if b.tributo.codigo != "ICMS" %}<th class="num" title="Compras para revenda e fretes lançados com PIS/COFINS zero">Crédito não lançado</th>{% endif %}</tr></thead>
+    <tbody>{% for m in b.meses %}
+      <tr><td class="nowrap">{{ m.data|date:"M/Y"|lower }}</td>
+        <td class="num">{{ m.saldo_anterior|brl }}</td>
+        <td class="num">{{ m.creditos|brl }}</td>
+        <td class="num">{{ m.debitos|brl }}</td>
+        <td class="num {% if m.resultado < 0 %}negativo{% else %}positivo{% endif %}">{{ m.resultado|brl }}</td>
+        <td class="num">{% if m.a_pagar %}<b class="saldo-pagar">{{ m.a_pagar|brl }}</b>{% else %}—{% endif %}</td>
+        <td class="num">{% if m.saldo_atual %}<b class="saldo-credor">{{ m.saldo_atual|brl }}</b>{% else %}—{% endif %}</td>
+        {% if b.tributo.codigo != "ICMS" %}<td class="num suave">{% if m.credito_nao_lancado %}{{ m.credito_nao_lancado|brl }}{% else %}—{% endif %}</td>{% endif %}
+      </tr>
+    {% empty %}<tr><td colspan="8" class="vazio">Nenhuma nota em {{ ano }}. Rode <code>python manage.py importar_legado</code>.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endfor %}
+
+<div class="cartao mb">
+  <div class="titulo"><div><h2>{% icone "fiscal" %} ICMS por <b>estado</b></h2>
+    <p>Crédito pela UF do fornecedor e débito pela UF do cliente. Compras de fora de SP costumam vir com 12%; vendas dentro de SP saem com 18%.</p></div>
+    <form method="get"><input type="hidden" name="ano" value="{{ ano }}"><select name="mes" onchange="this.form.submit()">{% for m in meses_ano %}<option value="{{ m }}" {% if m == mes_uf %}selected{% endif %}>{{ m|stringformat:"02d" }}/{{ ano }}</option>{% endfor %}</select></form>
+  </div>
+  <div class="tabela-caixa"><table class="tabela">
+    <thead><tr><th>UF</th><th class="num">Compras (R$)</th><th class="num">Crédito de ICMS</th><th class="num">Vendas (R$)</th><th class="num">Débito de ICMS</th></tr></thead>
+    <tbody>{% for l in icms_uf %}
+      <tr><td><b>{{ l.uf }}</b></td><td class="num">{{ l.compras|brl }}</td><td class="num">{{ l.credito|brl }}</td><td class="num">{{ l.vendas|brl }}</td><td class="num">{{ l.debito|brl }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="vazio">Sem notas em {{ data_uf|date:"m/Y" }}.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+</div>
+<p class="pequeno suave">A partir de 2027 a CBS substitui o PIS e a COFINS, e o IBS entra aos poucos no lugar do ICMS. Quando as notas trouxerem esses valores, eles entram aqui como mais uma conta.</p>
+{% endblock %}
