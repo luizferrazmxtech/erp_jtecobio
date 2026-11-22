@@ -637,3 +637,15 @@ tr.os-atencao td:first-child { box-shadow: inset 4px 0 0 var(--amarelo); }
 .saldo-numeros.cinco { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 @media (max-width: 760px) { .saldo-numeros.cinco { grid-template-columns: repeat(2, minmax(0, 1fr)); } .progresso-os .po-detalhe { margin-left: 0; } }
 .ponto.parcial { background: repeating-linear-gradient(90deg, #8fc9b2 0 2px, #b9ddcf 2px 4px); }
+
+/* Impostos desta venda e conta corrente de impostos */
+.impostos-venda .corpo { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.impostos-venda h3, .conta-impostos h3 { font-weight: 400; font-size: 15px; margin: 0 0 8px; }
+.tabela tr.total-impostos td { border-top: 2px solid var(--borda, #dfe3e8); background: rgba(0, 0, 0, .02); }
+table.conta { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.conta td { padding: 5px 4px; border-bottom: 1px solid var(--borda, #eef0f3); vertical-align: top; }
+table.conta tr.resultado td { border-top: 2px solid var(--borda, #dfe3e8); border-bottom: 0; }
+table.conta .positivo, .conta-impostos .positivo { color: var(--verde); }
+table.conta .negativo, .conta-impostos .negativo { color: var(--vermelho); }
+.conta-impostos .saldo-credor { color: var(--verde); }
+.conta-impostos .saldo-pagar { color: var(--vermelho); }

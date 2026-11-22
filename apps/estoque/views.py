@@ -35,7 +35,8 @@ def _cartoes(linhas):
         base = capacidade or l.quantidade_kg or 1
         pct = max(0, min(100, float(l.quantidade_kg * 100 / base)))
         pct_res = max(0.0, min(pct, float(reservado * 100 / base)))
-        fator = impostos.fator(l.produto.icms_compra)
+        credito = services.creditos_medios(l.produto, l.local).total
+        fator = (1 - credito / l.custo_medio) if l.custo_medio else impostos.fator(l.produto.icms_compra)
         g = grupos.setdefault(l.produto.pk, {"produto": l.produto, "tanques": [], "kg": 0, "valor": 0})
         g["kg"] += l.quantidade_kg
         if not l.local.eh_de_terceiros:
@@ -45,7 +46,8 @@ def _cartoes(linhas):
             "identificacao": tanque.identificacao if tanque and "estimada" not in tanque.identificacao else "",
             "reservado": reservado, "livre": l.quantidade_kg - reservado,
             "pct": round(pct), "altura_livre": pct - pct_res, "altura_reservado": pct_res,
-            "custo_net": l.custo_medio * fator, "valor_net": l.valor * fator, "fator": fator,
+            "custo_net": l.custo_medio - credito, "valor_net": l.valor * fator, "fator": fator,
+            "credito": credito,
             "entradas": entradas, "saidas": saidas,
             "ultima": movs[0] if movs else None,
             "classe": _classe_nivel(l.produto),
@@ -100,6 +102,7 @@ def entrada(request):
         services.registrar_entrada(
             produto=d["produto"], local=d["local"], quantidade_kg=d["quantidade_kg"],
             custo_unitario=d["custo_unitario"], data=d["data"], lote_codigo=d["lote_codigo"], tipo=d["tipo"],
+            icms_pct=d.get("icms_compra"),
             documento=d["documento"], observacao=d["observacao"], usuario=usuario,
         )
     return _tela(request, EntradaForm, "Entrada", executar)

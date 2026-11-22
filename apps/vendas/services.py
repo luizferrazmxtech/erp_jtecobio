@@ -18,6 +18,7 @@ from apps.cadastros.models import Local, Produto
 from apps.estoque import services as estoque
 from apps.estoque.models import Configuracao, Lote, Movimentacao
 from apps.fiscal.models import NotaFiscal
+from apps.fiscal.tributos import ICMS_FRETE_PADRAO, Impostos
 
 from . import impostos
 from .models import Pedido, PedidoOrigem, TabelaFrete
@@ -57,7 +58,8 @@ class Opcao:
     livre: Decimal
     custo_kg: Decimal
     frete: TabelaFrete | None
-    fator_compra: Decimal = Decimal("1")
+    creditos: Impostos = Impostos()
+    icms_frete: Decimal = ICMS_FRETE_PADRAO
 
     @property
     def frete_kg(self) -> Decimal | None:
@@ -70,15 +72,26 @@ class Opcao:
         return self.custo_kg + self.frete.preco_kg
 
     @property
+    def credito_kg(self) -> Decimal:
+        """Crédito de ICMS + PIS + COFINS que veio na compra deste tanque/lote."""
+        return self.creditos.total
+
+    @property
     def custo_net_kg(self) -> Decimal:
-        """Produto sem impostos (crédito de ICMS, PIS e COFINS)."""
-        return self.custo_kg * self.fator_compra
+        """Produto sem impostos: custo − créditos da compra."""
+        return self.custo_kg - self.credito_kg
+
+    @property
+    def frete_net_kg(self) -> Decimal | None:
+        if self.frete is None:
+            return None
+        return impostos.frete_net(self.frete.preco_kg, self.icms_frete)
 
     @property
     def custo_total_net_kg(self) -> Decimal | None:
         if self.frete is None:
             return None
-        return self.custo_net_kg + impostos.frete_net(self.frete.preco_kg)
+        return self.custo_net_kg + self.frete_net_kg
 
     def chave_ordem(self):
         # O que conta é o custo net: o imposto pago na compra volta como crédito.
@@ -86,13 +99,16 @@ class Opcao:
         return (self.frete is None, self.custo_total_net_kg or self.custo_net_kg, -self.livre)
 
 
-def opcoes_de_origem(produto: Produto, cidade: str, uf: str, excluir: Pedido | None = None) -> list[Opcao]:
-    """Todos os tanques com saldo livre do produto, com custo e frete até o destino.
+def opcoes_de_origem(produto: Produto, cidade: str, uf: str, excluir: Pedido | None = None,
+                     icms_frete=ICMS_FRETE_PADRAO) -> list[Opcao]:
+    """Todos os tanques com saldo livre do produto, com custo, créditos e frete até o destino.
 
+    Cada tanque usa o crédito real que veio nas suas compras: um tanque
+    abastecido com compra de dentro de SP (ICMS 18%) tem custo net menor
+    que outro com o mesmo preço comprado de fora (12%).
     Locais de produto de cliente (serviço de envase) nunca entram numa venda.
     """
     por_lote = Configuracao.atual().metodo_custo == Configuracao.MetodoCusto.LOTE
-    fator = impostos.fator(produto.icms_compra)
     opcoes = []
     locais = Local.objects.filter(
         ativo=True, movimentacoes__produto=produto,
@@ -104,11 +120,12 @@ def opcoes_de_origem(produto: Produto, cidade: str, uf: str, excluir: Pedido | N
             for lote in lotes:
                 livre = saldo_livre(produto, local, lote, excluir)
                 if livre > 0:
-                    opcoes.append(Opcao(local, lote, livre, lote.custo_unitario, frete, fator))
+                    opcoes.append(Opcao(local, lote, livre, lote.custo_unitario, frete, lote.creditos_kg, icms_frete))
         else:
             livre = saldo_livre(produto, local, None, excluir)
             if livre > 0:
-                opcoes.append(Opcao(local, None, livre, estoque.custo_medio(produto, local), frete, fator))
+                opcoes.append(Opcao(local, None, livre, estoque.custo_medio(produto, local), frete,
+                                    estoque.creditos_medios(produto, local), icms_frete))
     opcoes.sort(key=Opcao.chave_ordem)
     return opcoes
 
@@ -127,7 +144,7 @@ class Sugestao:
 
 def sugerir_origens(
     produto: Produto, quantidade_kg, cidade: str, uf: str,
-    minimo_por_origem_kg=0, excluir: Pedido | None = None,
+    minimo_por_origem_kg=0, excluir: Pedido | None = None, icms_frete=ICMS_FRETE_PADRAO,
 ) -> Sugestao:
     """Escolhe as origens de menor custo efetivo net (produto + frete, sem impostos).
 
@@ -138,7 +155,7 @@ def sugerir_origens(
     restante = Decimal(str(quantidade_kg))
     minimo = Decimal(str(minimo_por_origem_kg or 0))
     escolhidas = []
-    for opcao in opcoes_de_origem(produto, cidade, uf, excluir):
+    for opcao in opcoes_de_origem(produto, cidade, uf, excluir, icms_frete):
         if restante <= 0:
             break
         pegar = min(opcao.livre, restante)
@@ -197,19 +214,22 @@ def definir_origens(pedido: Pedido, origens: list[dict]) -> None:
             frete_kg = tabela.preco_kg if tabela else ZERO
             transportadora = transportadora or (tabela.transportadora if tabela else None)
         if por_lote and lote is not None:
-            custo = lote.custo_unitario
+            custo, creditos = lote.custo_unitario, lote.creditos_kg
         else:
             custo = estoque.custo_medio(pedido.produto, local)
-        PedidoOrigem.objects.create(
+            creditos = estoque.creditos_medios(pedido.produto, local)
+        origem = PedidoOrigem(
             pedido=pedido, local=local, lote=lote, quantidade_kg=quantidade,
             custo_unitario=custo, frete_kg=frete_kg, transportadora=transportadora,
         )
+        origem.definir_creditos(creditos)
+        origem.save()
 
 
 def aplicar_sugestao(pedido: Pedido, minimo_por_origem_kg=0) -> Sugestao:
     sugestao = sugerir_origens(
         pedido.produto, pedido.quantidade_kg, pedido.destino_cidade, pedido.destino_uf,
-        minimo_por_origem_kg, excluir=pedido,
+        minimo_por_origem_kg, excluir=pedido, icms_frete=pedido.icms_frete,
     )
     definir_origens(pedido, [
         {"local": o.local, "lote": o.lote, "quantidade_kg": q,
@@ -278,7 +298,9 @@ def faturar(pedido: Pedido, data: date, nota: NotaFiscal | None = None, usuario=
         )
         o.movimentacao = mov
         o.custo_unitario = mov.custo_unitario
-        o.save(update_fields=["movimentacao", "custo_unitario"])
+        o.definir_creditos(mov.creditos_kg)
+        o.save(update_fields=["movimentacao", "custo_unitario", "credito_icms_kg", "credito_pis_kg",
+                              "credito_cofins_kg"])
         movimentos.append(mov)
     pedido.status = Pedido.Status.FATURADO
     pedido.nota = nota

@@ -12,6 +12,36 @@ from django.db import models
 from apps.cadastros.models import Local, Produto
 from apps.contratos.models import Contrato
 from apps.fiscal.models import NotaFiscal
+from apps.fiscal.tributos import Impostos
+
+
+class CreditosPorKg(models.Model):
+    """Impostos que a JT recupera, por kg: o crédito de ICMS, PIS e COFINS
+    que veio na compra. Custo net (o que conta para a margem) = custo − créditos.
+
+    Fica no lote, em cada movimentação (a saída leva o crédito médio do
+    tanque, como o custo) e em cada origem de pedido.
+    """
+
+    credito_icms_kg = models.DecimalField("crédito de ICMS (R$/kg)", max_digits=12, decimal_places=6, default=0)
+    credito_pis_kg = models.DecimalField("crédito de PIS (R$/kg)", max_digits=12, decimal_places=6, default=0)
+    credito_cofins_kg = models.DecimalField("crédito de COFINS (R$/kg)", max_digits=12, decimal_places=6, default=0)
+
+    class Meta:
+        abstract = True
+
+    @property
+    def creditos_kg(self) -> Impostos:
+        return Impostos(self.credito_icms_kg, self.credito_pis_kg, self.credito_cofins_kg)
+
+    def definir_creditos(self, creditos: Impostos) -> None:
+        self.credito_icms_kg = creditos.icms
+        self.credito_pis_kg = creditos.pis
+        self.credito_cofins_kg = creditos.cofins
+
+    @property
+    def credito_total_kg(self):
+        return self.credito_icms_kg + self.credito_pis_kg + self.credito_cofins_kg
 
 
 class Configuracao(models.Model):
@@ -50,7 +80,7 @@ class Configuracao(models.Model):
         return obj
 
 
-class Lote(models.Model):
+class Lote(CreditosPorKg):
     """Um lote é uma entrada identificável de produto: uma NF de compra,
     um retorno de industrialização, um saldo inicial."""
 
@@ -62,6 +92,10 @@ class Lote(models.Model):
         NotaFiscal, on_delete=models.SET_NULL, null=True, blank=True, related_name="lotes",
     )
     origem = models.CharField(max_length=200, blank=True, help_text="Ex.: usina, contrato, industrialização")
+    icms_compra = models.DecimalField(
+        "ICMS da compra (%)", max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Alíquota de ICMS da nota de compra (12% de fora de SP, 18% dentro).",
+    )
 
     class Meta:
         ordering = ["data", "codigo"]
@@ -73,7 +107,7 @@ class Lote(models.Model):
         return f"{self.codigo} ({self.produto})"
 
 
-class Movimentacao(models.Model):
+class Movimentacao(CreditosPorKg):
     class Tipo(models.TextChoices):
         SALDO_INICIAL = "INICIAL", "Saldo inicial"
         ENTRADA = "ENTRADA", "Entrada (compra)"

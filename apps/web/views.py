@@ -233,6 +233,54 @@ def _saldo_contratos(tipo):
 
 
 @login_required
+def impostos(request):
+    """Conta corrente mensal de ICMS, PIS e COFINS feita com as notas registradas."""
+    from apps.fiscal import apuracao
+
+    contas = apuracao.contas_correntes(ate=timezone.localdate())
+    anos = sorted({m.ano for c in contas for m in c.meses}, reverse=True)
+    try:
+        ano = int(request.GET.get("ano") or (anos[0] if anos else timezone.localdate().year))
+    except ValueError:
+        ano = anos[0] if anos else timezone.localdate().year
+    blocos = []
+    for c in contas:
+        meses = c.do_ano(ano)
+        blocos.append({
+            "tributo": c.tributo,
+            "meses": meses,
+            "creditos": sum((m.creditos for m in meses), ZERO),
+            "debitos": sum((m.debitos for m in meses), ZERO),
+            "a_pagar": sum((m.a_pagar for m in meses), ZERO),
+            "nao_lancado": sum((m.credito_nao_lancado for m in meses), ZERO),
+            "saldo_final": meses[-1].saldo_atual if meses else ZERO,
+            "ultimo": meses[-1] if meses else None,
+        })
+    meses_ano = [m.mes for m in (contas[0].do_ano(ano) if contas else [])]
+    try:
+        mes_uf = int(request.GET.get("mes") or (meses_ano[-1] if meses_ano else 1))
+    except ValueError:
+        mes_uf = meses_ano[-1] if meses_ano else 1
+    return render(request, "web/impostos.html", {
+        "blocos": blocos, "anos": anos, "ano": ano, "meses_ano": meses_ano, "mes_uf": mes_uf,
+        "data_uf": date(ano, mes_uf, 1),
+        "icms_uf": apuracao.icms_por_uf(ano, mes_uf),
+        "pis_cofins_nao_lancado": sum((b["nao_lancado"] for b in blocos), ZERO),
+    })
+
+
+def _impostos_do_mes(hoje):
+    """Resumo do último mês com notas para o painel."""
+    from apps.fiscal import apuracao
+
+    resumo = []
+    for c in apuracao.contas_correntes(ate=hoje):
+        if c.meses:
+            resumo.append({"tributo": c.tributo, "mes": c.meses[-1]})
+    return resumo
+
+
+@login_required
 def painel(request):
     from apps.servicos.views import so_operacao
 
@@ -270,6 +318,7 @@ def painel(request):
         "ultimos_pedidos": Pedido.objects.select_related("cliente", "produto")[:6],
         "grafico": vendas_mes,
         "fornecedores": _melhores_fornecedores(hoje),
+        "impostos_mes": _impostos_do_mes(hoje),
         "maiores_clientes": [
             {**c, "pct": int(c["total"] * 100 / maior_cliente)} for c in maiores_clientes
         ],
